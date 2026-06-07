@@ -22,6 +22,7 @@ type HTTPHandler struct {
 	attemptSvc    *service.AttemptService
 	subjectiveSvc *service.SubjectiveService
 	examSvc       *service.ExamService
+	discussionSvc *service.DiscussionService
 	tokens        *auth.TokenManager
 	log           *slog.Logger
 }
@@ -32,6 +33,7 @@ func New(
 	attemptSvc *service.AttemptService,
 	subjectiveSvc *service.SubjectiveService,
 	examSvc *service.ExamService,
+	discussionSvc *service.DiscussionService,
 	tokens *auth.TokenManager,
 	log *slog.Logger,
 ) *HTTPHandler {
@@ -41,6 +43,7 @@ func New(
 		attemptSvc:    attemptSvc,
 		subjectiveSvc: subjectiveSvc,
 		examSvc:       examSvc,
+		discussionSvc: discussionSvc,
 		tokens:        tokens,
 		log:           log,
 	}
@@ -115,6 +118,21 @@ func (h *HTTPHandler) Router() *gin.Engine {
 				student.POST("/exams/:id/enter", h.enterExam)
 				student.POST("/exams/:id/submit", h.submitExam)
 				student.GET("/exams/:id/result", h.examResult)
+
+				student.GET("/discussions", h.listDiscussions)
+				student.GET("/discussions/replies", h.listReplies)
+				student.POST("/discussions", h.createDiscussion)
+				student.POST("/discussions/:id/like", h.toggleLike)
+				student.DELETE("/discussions/:id", h.deleteDiscussion)
+			}
+
+			teacher := authed.Group("/teacher", middleware.RequireRole(models.RoleTeacher))
+			{
+				teacher.GET("/discussions", h.listDiscussions)
+				teacher.GET("/discussions/replies", h.listReplies)
+				teacher.POST("/discussions", h.createDiscussion)
+				teacher.POST("/discussions/:id/like", h.toggleLike)
+				teacher.DELETE("/discussions/:id", h.deleteDiscussion)
 			}
 		}
 	}
@@ -591,6 +609,12 @@ func (h *HTTPHandler) respondServiceError(c *gin.Context, err error) {
 		errors.Is(err, service.ErrExamCancelled), errors.Is(err, service.ErrNotInExamClass),
 		errors.Is(err, service.ErrExamInProgress):
 		c.JSON(http.StatusForbidden, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrDiscussionNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrInvalidDiscussion), errors.Is(err, service.ErrReplyTooDeep):
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrCannotDeleteDiscussion):
+		c.JSON(http.StatusForbidden, gin.H{"message": err.Error()})
 	default:
 		h.log.Error("service error", "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
@@ -802,4 +826,132 @@ func (h *HTTPHandler) examResult(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, participant)
+}
+
+func (h *HTTPHandler) createDiscussion(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	var req dto.CreateDiscussionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid discussion payload"})
+		return
+	}
+	discussion, err := h.discussionSvc.CreateDiscussion(claims.UserID, claims.Role, req)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, discussion)
+}
+
+func (h *HTTPHandler) listDiscussions(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	var filter dto.DiscussionFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid filter"})
+		return
+	}
+	discussions, total, err := h.discussionSvc.ListDiscussions(filter, claims.UserID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+
+	ids := make([]uint, 0, len(discussions))
+	for _, d := range discussions {
+		ids = append(ids, d.ID)
+	}
+	likedMap, _ := h.discussionSvc.GetUserLikedMap(ids, claims.UserID)
+
+	type discussionWithLike struct {
+		*models.Discussion
+		IsLiked bool `json:"isLiked"`
+	}
+
+	result := make([]discussionWithLike, len(discussions))
+	for i, d := range discussions {
+		result[i] = discussionWithLike{Discussion: &discussions[i], IsLiked: likedMap[d.ID]}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"items": result, "total": total, "page": filter.Page, "pageSize": filter.PageSize})
+}
+
+func (h *HTTPHandler) listReplies(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	var filter dto.ReplyFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid filter"})
+		return
+	}
+	replies, total, err := h.discussionSvc.ListReplies(filter, claims.UserID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+
+	ids := make([]uint, 0, len(replies))
+	for _, r := range replies {
+		ids = append(ids, r.ID)
+	}
+	likedMap, _ := h.discussionSvc.GetUserLikedMap(ids, claims.UserID)
+
+	type replyWithLike struct {
+		*models.Discussion
+		IsLiked bool `json:"isLiked"`
+	}
+
+	result := make([]replyWithLike, len(replies))
+	for i, r := range replies {
+		result[i] = replyWithLike{Discussion: &replies[i], IsLiked: likedMap[r.ID]}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"items": result, "total": total, "page": filter.Page, "pageSize": filter.PageSize})
+}
+
+func (h *HTTPHandler) toggleLike(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid discussion id"})
+		return
+	}
+	isLiked, likeCount, err := h.discussionSvc.ToggleLike(uint(id), claims.UserID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"isLiked": isLiked, "likeCount": likeCount})
+}
+
+func (h *HTTPHandler) deleteDiscussion(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid discussion id"})
+		return
+	}
+	if err := h.discussionSvc.DeleteDiscussion(uint(id), claims.UserID, claims.Role); err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "discussion deleted"})
 }

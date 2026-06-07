@@ -47,6 +47,8 @@ func autoMigrate(db *gorm.DB) error {
 		&models.SubjectiveSubmission{},
 		&models.Exam{},
 		&models.ExamParticipant{},
+		&models.Discussion{},
+		&models.DiscussionLike{},
 	); err != nil {
 		return fmt.Errorf("auto migrate: %w", err)
 	}

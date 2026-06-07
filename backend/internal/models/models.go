@@ -148,3 +148,35 @@ type ExamParticipant struct {
 	CreatedAt  time.Time `json:"createdAt"`
 	UpdatedAt  time.Time `json:"updatedAt"`
 }
+
+const (
+	DiscussionStatusNormal   = "normal"
+	DiscussionStatusDeleted  = "deleted"
+	DiscussionStatusFolded   = "folded"
+)
+
+type Discussion struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	QuestionID  uint      `gorm:"index;not null" json:"questionId"`
+	AuthorID    uint      `gorm:"index;not null" json:"authorId"`
+	Author      *User     `gorm:"foreignKey:AuthorID" json:"author,omitempty"`
+	Content     string    `gorm:"type:text;not null" json:"content"`
+	ParentID    *uint     `gorm:"index" json:"parentId"`
+	Parent      *Discussion `gorm:"foreignKey:ParentID" json:"parent,omitempty"`
+	LikeCount   int       `gorm:"not null;default:0;index" json:"likeCount"`
+	Status      string    `gorm:"size:16;not null;default:normal;index" json:"status"`
+	Floor       int       `gorm:"not null;default:0" json:"floor"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+type DiscussionLike struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	DiscussionID uint      `gorm:"uniqueIndex:idx_discussion_user;not null" json:"discussionId"`
+	UserID       uint      `gorm:"uniqueIndex:idx_discussion_user;not null" json:"userId"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
+func (DiscussionLike) TableName() string {
+	return "discussion_likes"
+}

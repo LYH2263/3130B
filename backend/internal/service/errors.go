@@ -31,4 +31,9 @@ var (
 	ErrAlreadySubmitted       = errors.New("exam already submitted")
 	ErrExamInProgress         = errors.New("exam is in progress, cannot modify")
 	ErrInvalidExamStatus      = errors.New("invalid exam status")
+
+	ErrDiscussionNotFound     = errors.New("discussion not found")
+	ErrInvalidDiscussion      = errors.New("invalid discussion content")
+	ErrReplyTooDeep           = errors.New("replies only support two levels")
+	ErrCannotDeleteDiscussion = errors.New("no permission to delete this discussion")
 )

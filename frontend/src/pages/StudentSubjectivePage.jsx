@@ -7,6 +7,8 @@ import {
   submitSubjectiveAnswer,
 } from '../api/client';
 
+import { DiscussionSection } from '../components/DiscussionSection';
+
 export function StudentSubjectivePage({ user, token, onLogout, onNavigateToMy }) {
   const [questions, setQuestions] = useState([]);
   const [submissions, setSubmissions] = useState([]);
@@ -271,6 +273,13 @@ export function StudentSubjectivePage({ user, token, onLogout, onNavigateToMy })
                   </div>
                 </div>
               )}
+
+              <DiscussionSection
+                questionId={selectedQuestion.id}
+                token={token}
+                user={user}
+                defaultOpen={isSubmitted}
+              />
             </div>
           )}
         </section>

@@ -89,3 +89,22 @@ type ExamFilter struct {
 type ExamSubmitRequest struct {
 	Answers []SubmitAnswerItem `json:"answers" binding:"required,min=1,dive"`
 }
+
+type CreateDiscussionRequest struct {
+	QuestionID uint   `json:"questionId" binding:"required"`
+	Content    string `json:"content" binding:"required,min=1,max=1000"`
+	ParentID   *uint  `json:"parentId"`
+}
+
+type DiscussionFilter struct {
+	QuestionID uint   `form:"questionId" binding:"required"`
+	Sort       string `form:"sort,default=hot"`
+	Page       int    `form:"page,default=1"`
+	PageSize   int    `form:"pageSize,default=10"`
+}
+
+type ReplyFilter struct {
+	ParentID uint `form:"parentId" binding:"required"`
+	Page     int  `form:"page,default=1"`
+	PageSize int  `form:"pageSize,default=5"`
+}

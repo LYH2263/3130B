@@ -140,3 +140,37 @@ export async function submitExam(id, answers, token) {
 export async function getExamResult(id, token) {
   return apiRequest(`/student/exams/${id}/result`, { token });
 }
+
+export async function getDiscussions(params, token, role = 'student') {
+  const query = new URLSearchParams();
+  if (params.questionId) query.set('questionId', params.questionId);
+  if (params.sort) query.set('sort', params.sort);
+  if (params.page) query.set('page', params.page);
+  if (params.pageSize) query.set('pageSize', params.pageSize);
+  const prefix = role === 'teacher' ? '/teacher' : '/student';
+  return apiRequest(`${prefix}/discussions?${query.toString()}`, { token });
+}
+
+export async function getDiscussionReplies(params, token, role = 'student') {
+  const query = new URLSearchParams();
+  if (params.parentId) query.set('parentId', params.parentId);
+  if (params.page) query.set('page', params.page);
+  if (params.pageSize) query.set('pageSize', params.pageSize);
+  const prefix = role === 'teacher' ? '/teacher' : '/student';
+  return apiRequest(`${prefix}/discussions/replies?${query.toString()}`, { token });
+}
+
+export async function createDiscussion(data, token, role = 'student') {
+  const prefix = role === 'teacher' ? '/teacher' : '/student';
+  return apiRequest(`${prefix}/discussions`, { method: 'POST', token, body: data });
+}
+
+export async function toggleDiscussionLike(id, token, role = 'student') {
+  const prefix = role === 'teacher' ? '/teacher' : '/student';
+  return apiRequest(`${prefix}/discussions/${id}/like`, { method: 'POST', token });
+}
+
+export async function deleteDiscussion(id, token, role = 'student') {
+  const prefix = role === 'teacher' ? '/teacher' : '/student';
+  return apiRequest(`${prefix}/discussions/${id}`, { method: 'DELETE', token });
+}
