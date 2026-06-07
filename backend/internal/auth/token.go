@@ -9,9 +9,10 @@ import (
 )
 
 type Claims struct {
-	UserID  uint   `json:"userId"`
-	Role    string `json:"role"`
-	ClassID *uint  `json:"classId,omitempty"`
+	UserID   uint   `json:"userId"`
+	Username string `json:"username"`
+	Role     string `json:"role"`
+	ClassID  *uint  `json:"classId,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -23,12 +24,13 @@ func NewTokenManager(secret string) *TokenManager {
 	return &TokenManager{secret: []byte(secret)}
 }
 
-func (m *TokenManager) Generate(userID uint, role string, classID *uint) (string, error) {
+func (m *TokenManager) Generate(userID uint, username string, role string, classID *uint) (string, error) {
 	now := time.Now()
 	claims := Claims{
-		UserID:  userID,
-		Role:    role,
-		ClassID: classID,
+		UserID:   userID,
+		Username: username,
+		Role:     role,
+		ClassID:  classID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(now),

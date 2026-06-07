@@ -6,8 +6,10 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 
 	"label3130/backend/internal/auth"
 	"label3130/backend/internal/dto"
@@ -24,8 +26,10 @@ type HTTPHandler struct {
 	examSvc       *service.ExamService
 	discussionSvc *service.DiscussionService
 	checkinSvc    *service.CheckinService
+	pkSvc         *service.PkService
 	tokens        *auth.TokenManager
 	log           *slog.Logger
+	wsUpgrader    *websocket.Upgrader
 }
 
 func New(
@@ -36,9 +40,17 @@ func New(
 	examSvc *service.ExamService,
 	discussionSvc *service.DiscussionService,
 	checkinSvc *service.CheckinService,
+	pkSvc *service.PkService,
 	tokens *auth.TokenManager,
 	log *slog.Logger,
 ) *HTTPHandler {
+	upgrader := &websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
 	return &HTTPHandler{
 		authSvc:       authSvc,
 		questionSvc:   questionSvc,
@@ -47,8 +59,10 @@ func New(
 		examSvc:       examSvc,
 		discussionSvc: discussionSvc,
 		checkinSvc:    checkinSvc,
+		pkSvc:         pkSvc,
 		tokens:        tokens,
 		log:           log,
+		wsUpgrader:    upgrader,
 	}
 }
 
@@ -132,6 +146,11 @@ func (h *HTTPHandler) Router() *gin.Engine {
 				student.POST("/checkin", h.manualCheckin)
 				student.GET("/checkin/calendar", h.getCheckinCalendar)
 				student.GET("/checkin/badges", h.getUserBadges)
+
+				student.POST("/pk/rooms", h.createPkRoom)
+				student.POST("/pk/rooms/join", h.joinPkRoom)
+				student.GET("/pk/rooms/:code", h.getPkRoom)
+				student.GET("/pk/rooms/:id/results", h.getPkRoundResults)
 			}
 
 			teacher := authed.Group("/teacher", middleware.RequireRole(models.RoleTeacher))
@@ -144,6 +163,8 @@ func (h *HTTPHandler) Router() *gin.Engine {
 			}
 		}
 	}
+
+	r.GET("/api/pk/ws/:roomCode", h.pkWebSocket)
 
 	return r
 }
@@ -643,6 +664,14 @@ func (h *HTTPHandler) respondServiceError(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 	case errors.Is(err, service.ErrCannotDeleteDiscussion):
 		c.JSON(http.StatusForbidden, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrPkRoomNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrPkRoomFull):
+		c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrPkRoomNotWaiting), errors.Is(err, service.ErrPkGameEnded),
+		errors.Is(err, service.ErrPkAlreadyInRoom), errors.Is(err, service.ErrPkNotInRoom),
+		errors.Is(err, service.ErrPkInvalidAnswer):
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 	default:
 		h.log.Error("service error", "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
@@ -1048,4 +1077,100 @@ func (h *HTTPHandler) getUserBadges(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, badges)
+}
+
+func (h *HTTPHandler) createPkRoom(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	var req dto.CreatePkRoomRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid payload"})
+		return
+	}
+	result, err := h.pkSvc.CreateRoom(claims.UserID, claims.Username, req)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, result)
+}
+
+func (h *HTTPHandler) joinPkRoom(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	var req dto.JoinPkRoomRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid payload"})
+		return
+	}
+	result, err := h.pkSvc.JoinRoom(claims.UserID, claims.Username, req)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *HTTPHandler) getPkRoom(c *gin.Context) {
+	roomCode := c.Param("code")
+	result, err := h.pkSvc.GetRoomInfo(roomCode)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *HTTPHandler) getPkRoundResults(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid room id"})
+		return
+	}
+	results, err := h.pkSvc.GetRoundResults(uint(id))
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, results)
+}
+
+func (h *HTTPHandler) pkWebSocket(c *gin.Context) {
+	token := c.Query("token")
+	if token == "" {
+		authHeader := c.GetHeader("Authorization")
+		if len(authHeader) > 7 && strings.EqualFold(authHeader[:7], "Bearer ") {
+			token = authHeader[7:]
+		}
+	}
+	if token == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "missing token"})
+		return
+	}
+
+	claims, err := h.tokens.Parse(token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+
+	roomCode := c.Param("roomCode")
+	if roomCode == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "missing room code"})
+		return
+	}
+
+	conn, err := h.wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		h.log.Warn("ws upgrade failed", "error", err.Error())
+		return
+	}
+
+	h.pkSvc.HandleWebSocket(conn, claims.UserID, claims.Username, roomCode)
 }

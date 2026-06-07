@@ -163,6 +163,9 @@ export function StudentDashboard({ user, token, onLogout, onNavigateToSubjective
           <button className="btn btn-outline btn-info" onClick={onNavigateToExam}>
             考试中心
           </button>
+          <button className="btn btn-outline btn-warning" onClick={onNavigateToPk}>
+            ⚔️ PK对战
+          </button>
           <button className="btn btn-neutral" onClick={onLogout}>
             退出登录
           </button>

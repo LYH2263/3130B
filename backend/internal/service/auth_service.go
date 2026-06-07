@@ -64,7 +64,7 @@ func (s *AuthService) RegisterStudent(req dto.RegisterRequest) (*LoginResult, er
 		return nil, fmt.Errorf("create user: %w", err)
 	}
 
-	token, err := s.tokens.Generate(user.ID, user.Role, user.ClassID)
+	token, err := s.tokens.Generate(user.ID, user.Username, user.Role, user.ClassID)
 	if err != nil {
 		return nil, fmt.Errorf("generate token: %w", err)
 	}
@@ -92,7 +92,7 @@ func (s *AuthService) Login(req dto.LoginRequest) (*LoginResult, error) {
 		return nil, ErrInvalidCredential
 	}
 
-	token, err := s.tokens.Generate(user.ID, user.Role, user.ClassID)
+	token, err := s.tokens.Generate(user.ID, user.Username, user.Role, user.ClassID)
 	if err != nil {
 		return nil, fmt.Errorf("generate token: %w", err)
 	}

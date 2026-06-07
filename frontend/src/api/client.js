@@ -190,3 +190,26 @@ export async function getCheckinCalendar(year, month, token) {
 export async function getUserBadges(token) {
   return apiRequest('/student/checkin/badges', { token });
 }
+
+export async function createPkRoom(data, token) {
+  return apiRequest('/student/pk/rooms', { method: 'POST', token, body: data });
+}
+
+export async function joinPkRoom(roomCode, token) {
+  return apiRequest('/student/pk/rooms/join', { method: 'POST', token, body: { roomCode } });
+}
+
+export async function getPkRoom(roomCode, token) {
+  return apiRequest(`/student/pk/rooms/${roomCode}`, { token });
+}
+
+export async function getPkRoundResults(roomId, token) {
+  return apiRequest(`/student/pk/rooms/${roomId}/results`, { token });
+}
+
+export function connectPkWebSocket(roomCode, token) {
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsBase = import.meta.env.VITE_WS_BASE || `${wsProtocol}//${window.location.host}`;
+  const wsUrl = `${wsBase}/api/pk/ws/${roomCode}?token=${encodeURIComponent(token)}`;
+  return new WebSocket(wsUrl);
+}

@@ -53,6 +53,8 @@ func autoMigrate(db *gorm.DB) error {
 		&models.Streak{},
 		&models.Badge{},
 		&models.UserBadge{},
+		&models.PkRoom{},
+		&models.PkRoundResult{},
 	); err != nil {
 		return fmt.Errorf("auto migrate: %w", err)
 	}

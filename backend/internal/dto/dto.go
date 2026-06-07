@@ -168,3 +168,79 @@ type UserBadgeResponse struct {
 	AwardedAt   string `json:"awardedAt"`
 	Owned       bool   `json:"owned"`
 }
+
+type CreatePkRoomRequest struct {
+	QuestionCount int `json:"questionCount" binding:"omitempty,min=3,max=20"`
+	TimePerQuestion int `json:"timePerQuestion" binding:"omitempty,min=5,max=60"`
+}
+
+type JoinPkRoomRequest struct {
+	RoomCode string `json:"roomCode" binding:"required,len=6"`
+}
+
+type PkRoomResponse struct {
+	ID              uint   `json:"id"`
+	RoomCode        string `json:"roomCode"`
+	Status          string `json:"status"`
+	QuestionCount   int    `json:"questionCount"`
+	TimePerQuestion int    `json:"timePerQuestion"`
+	PlayerAID       *uint  `json:"playerAId"`
+	PlayerAName     string `json:"playerAName"`
+	PlayerBID       *uint  `json:"playerBId"`
+	PlayerBName     string `json:"playerBName"`
+	ScoreA          int    `json:"scoreA"`
+	ScoreB          int    `json:"scoreB"`
+	WinnerID        *uint  `json:"winnerId"`
+	StartedAt       string `json:"startedAt"`
+	FinishedAt      string `json:"finishedAt"`
+}
+
+type PkWsMessage struct {
+	Type string      `json:"type"`
+	Data interface{} `json:"data"`
+}
+
+type PkAnswerData struct {
+	QuestionID uint `json:"questionId"`
+	OptionID   uint `json:"optionId"`
+}
+
+type PkRoundData struct {
+	RoundIndex   int             `json:"roundIndex"`
+	QuestionID   uint            `json:"questionId"`
+	Title        string          `json:"title"`
+	Options      []PkOptionBrief `json:"options"`
+	TimeLimitSec int             `json:"timeLimitSec"`
+	StartAt      int64           `json:"startAt"`
+}
+
+type PkOptionBrief struct {
+	ID      uint   `json:"id"`
+	Content string `json:"content"`
+}
+
+type PkRoundResultData struct {
+	RoundIndex      int  `json:"roundIndex"`
+	QuestionID      uint `json:"questionId"`
+	CorrectOptionID uint `json:"correctOptionId"`
+	PlayerACorrect  bool `json:"playerACorrect"`
+	PlayerBCorrect  bool `json:"playerBCorrect"`
+	PlayerATimeMs   int  `json:"playerATimeMs"`
+	PlayerBTimeMs   int  `json:"playerBTimeMs"`
+	ScoreA          int  `json:"scoreA"`
+	ScoreB          int  `json:"scoreB"`
+}
+
+type PkGameOverData struct {
+	WinnerID   uint   `json:"winnerId"`
+	WinnerName string `json:"winnerName"`
+	IsDraw     bool   `json:"isDraw"`
+	ScoreA     int    `json:"scoreA"`
+	ScoreB     int    `json:"scoreB"`
+}
+
+type PkPlayerLeaveData struct {
+	PlayerID   uint   `json:"playerId"`
+	PlayerName string `json:"playerName"`
+	Reason     string `json:"reason"`
+}

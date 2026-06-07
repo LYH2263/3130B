@@ -239,3 +239,48 @@ var MilestoneBadges = []Badge{
 	{Name: "连续打卡60天", Description: "连续打卡满60天", Icon: "💎", Type: BadgeTypeStreak, Condition: 60},
 	{Name: "连续打卡100天", Description: "连续打卡满100天", Icon: "🏆", Type: BadgeTypeStreak, Condition: 100},
 }
+
+const (
+	PkRoomStatusWaiting  = "waiting"
+	PkRoomStatusOngoing  = "ongoing"
+	PkRoomStatusFinished = "finished"
+)
+
+type PkRoom struct {
+	ID            uint       `gorm:"primaryKey" json:"id"`
+	RoomCode      string     `gorm:"size:8;uniqueIndex;not null" json:"roomCode"`
+	Status        string     `gorm:"size:16;not null;default:waiting;index" json:"status"`
+	QuestionCount int        `gorm:"not null;default:10" json:"questionCount"`
+	TimePerQuestion int     `gorm:"not null;default:15" json:"timePerQuestion"`
+	PlayerAID     *uint      `gorm:"index" json:"playerAId"`
+	PlayerA       *User      `gorm:"foreignKey:PlayerAID" json:"playerA,omitempty"`
+	PlayerBID     *uint      `gorm:"index" json:"playerBId"`
+	PlayerB       *User      `gorm:"foreignKey:PlayerBID" json:"playerB,omitempty"`
+	ScoreA        int        `gorm:"not null;default:0" json:"scoreA"`
+	ScoreB        int        `gorm:"not null;default:0" json:"scoreB"`
+	WinnerID      *uint      `gorm:"index" json:"winnerId"`
+	Winner        *User      `gorm:"foreignKey:WinnerID" json:"winner,omitempty"`
+	Questions     string     `gorm:"type:text" json:"-"`
+	StartedAt     *time.Time `json:"startedAt"`
+	FinishedAt    *time.Time `json:"finishedAt"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+}
+
+type PkRoundResult struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	RoomID     uint      `gorm:"index;not null" json:"roomId"`
+	RoundIndex int       `gorm:"not null" json:"roundIndex"`
+	QuestionID uint      `gorm:"not null" json:"questionId"`
+	PlayerAOptionID *uint `gorm:"index" json:"playerAOptionId"`
+	PlayerAIsCorrect *bool `gorm:"index" json:"playerAIsCorrect"`
+	PlayerATimeMs *int   `json:"playerATimeMs"`
+	PlayerBOptionID *uint `gorm:"index" json:"playerBOptionId"`
+	PlayerBIsCorrect *bool `gorm:"index" json:"playerBIsCorrect"`
+	PlayerBTimeMs *int   `json:"playerBTimeMs"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+func (PkRoundResult) TableName() string {
+	return "pk_round_results"
+}

@@ -12,6 +12,8 @@ import { StudentMySubjectivePage } from './pages/StudentMySubjectivePage';
 import { TeacherExamPage } from './pages/TeacherExamPage';
 import { StudentExamCenterPage } from './pages/StudentExamCenterPage';
 import { ExamPage } from './pages/ExamPage';
+import { PkLobbyPage } from './pages/PkLobbyPage';
+import { PkGamePage } from './pages/PkGamePage';
 
 const TOKEN_KEY = 'quizlab_token_3130';
 
@@ -24,6 +26,8 @@ export default function App() {
   const [teacherPage, setTeacherPage] = useState('dashboard');
   const [studentPage, setStudentPage] = useState('dashboard');
   const [selectedExam, setSelectedExam] = useState(null);
+  const [pkRoom, setPkRoom] = useState(null);
+  const [showPk, setShowPk] = useState(false);
 
   const loadClasses = async () => {
     try {
@@ -86,7 +90,26 @@ export default function App() {
     setTeacherPage('dashboard');
     setStudentPage('dashboard');
     setSelectedExam(null);
+    setPkRoom(null);
+    setShowPk(false);
     toast.success('已退出登录');
+  };
+
+  const handleEnterPkLobby = () => {
+    setShowPk(true);
+    setPkRoom(null);
+  };
+
+  const handleEnterPkRoom = (room) => {
+    setPkRoom(room);
+  };
+
+  const handleExitPk = () => {
+    if (pkRoom) {
+      setPkRoom(null);
+    } else {
+      setShowPk(false);
+    }
   };
 
   if (initializing) {
@@ -198,6 +221,7 @@ export default function App() {
             onNavigateToSubjective={() => setStudentPage('subjective')}
             onNavigateToMySubjective={() => setStudentPage('mySubjective')}
             onNavigateToExam={() => setStudentPage('exam')}
+            onNavigateToPk={handleEnterPkLobby}
           />
         );
     }
@@ -216,6 +240,26 @@ export default function App() {
     }
     if (user.role === 'teacher') {
       return renderTeacherPage();
+    }
+    if (showPk && user.role === 'student') {
+      if (pkRoom) {
+        return (
+          <PkGamePage
+            room={pkRoom}
+            user={user}
+            token={token}
+            onBack={handleExitPk}
+          />
+        );
+      }
+      return (
+        <PkLobbyPage
+          user={user}
+          token={token}
+          onLogout={handleExitPk}
+          onEnterRoom={handleEnterPkRoom}
+        />
+      );
     }
     if (selectedExam) {
       return (
