@@ -66,3 +66,42 @@ type AttemptAnswer struct {
 	CreatedAt        time.Time `json:"createdAt"`
 	UpdatedAt        time.Time `json:"updatedAt"`
 }
+
+const (
+	SubjectiveStatusActive   = "active"
+	SubjectiveStatusInactive = "inactive"
+
+	SubmissionStatusPending  = "pending"
+	SubmissionStatusGraded   = "graded"
+)
+
+type SubjectiveQuestion struct {
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	Title         string    `gorm:"type:text;not null" json:"title"`
+	ReferenceAnswer string   `gorm:"type:text" json:"referenceAnswer"`
+	FullScore     float64   `gorm:"type:decimal(10,2);not null;default:10" json:"fullScore"`
+	CreatedBy     uint      `gorm:"index;not null" json:"createdBy"`
+	Creator       *User     `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`
+	Status        string    `gorm:"size:16;not null;default:active;index" json:"status"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+}
+
+type SubjectiveSubmission struct {
+	ID          uint                `gorm:"primaryKey" json:"id"`
+	QuestionID  uint                `gorm:"index;not null" json:"questionId"`
+	Question    *SubjectiveQuestion `gorm:"foreignKey:QuestionID" json:"question,omitempty"`
+	StudentID   uint                `gorm:"index;not null" json:"studentId"`
+	Student     *User               `gorm:"foreignKey:StudentID" json:"student,omitempty"`
+	Content     string              `gorm:"type:text;not null" json:"content"`
+	SubmittedAt time.Time           `json:"submittedAt"`
+	Status      string              `gorm:"size:16;not null;default:pending;index" json:"status"`
+	Score       *float64            `gorm:"type:decimal(10,2)" json:"score"`
+	Comment     string              `gorm:"type:text" json:"comment"`
+	GradedBy    *uint               `gorm:"index" json:"gradedBy"`
+	Grader      *User               `gorm:"foreignKey:GradedBy" json:"grader,omitempty"`
+	GradedAt    *time.Time          `json:"gradedAt"`
+	Version     int                 `gorm:"not null;default:1" json:"version"`
+	CreatedAt   time.Time           `json:"createdAt"`
+	UpdatedAt   time.Time           `json:"updatedAt"`
+}

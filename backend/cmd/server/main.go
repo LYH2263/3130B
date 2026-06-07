@@ -35,8 +35,9 @@ func main() {
 	authSvc := service.NewAuthService(db, tokens, log)
 	questionSvc := service.NewQuestionService(db, log)
 	attemptSvc := service.NewAttemptService(db, log)
+	subjectiveSvc := service.NewSubjectiveService(db, log)
 
-	h := handler.New(authSvc, questionSvc, attemptSvc, tokens, log)
+	h := handler.New(authSvc, questionSvc, attemptSvc, subjectiveSvc, tokens, log)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           h.Router(),

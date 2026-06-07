@@ -17,26 +17,29 @@ import (
 )
 
 type HTTPHandler struct {
-	authSvc     *service.AuthService
-	questionSvc *service.QuestionService
-	attemptSvc  *service.AttemptService
-	tokens      *auth.TokenManager
-	log         *slog.Logger
+	authSvc       *service.AuthService
+	questionSvc   *service.QuestionService
+	attemptSvc    *service.AttemptService
+	subjectiveSvc *service.SubjectiveService
+	tokens        *auth.TokenManager
+	log           *slog.Logger
 }
 
 func New(
 	authSvc *service.AuthService,
 	questionSvc *service.QuestionService,
 	attemptSvc *service.AttemptService,
+	subjectiveSvc *service.SubjectiveService,
 	tokens *auth.TokenManager,
 	log *slog.Logger,
 ) *HTTPHandler {
 	return &HTTPHandler{
-		authSvc:     authSvc,
-		questionSvc: questionSvc,
-		attemptSvc:  attemptSvc,
-		tokens:      tokens,
-		log:         log,
+		authSvc:       authSvc,
+		questionSvc:   questionSvc,
+		attemptSvc:    attemptSvc,
+		subjectiveSvc: subjectiveSvc,
+		tokens:        tokens,
+		log:           log,
 	}
 }
 
@@ -71,6 +74,17 @@ func (h *HTTPHandler) Router() *gin.Engine {
 				teacher.PUT("/questions/:id", h.updateQuestion)
 				teacher.DELETE("/questions/:id", h.deleteQuestion)
 				teacher.POST("/questions/upload", h.uploadQuestions)
+
+				teacher.GET("/subjective-questions", h.listSubjectiveQuestions)
+				teacher.GET("/subjective-questions/:id", h.getSubjectiveQuestion)
+				teacher.POST("/subjective-questions", h.createSubjectiveQuestion)
+				teacher.PUT("/subjective-questions/:id", h.updateSubjectiveQuestion)
+				teacher.DELETE("/subjective-questions/:id", h.deleteSubjectiveQuestion)
+
+				teacher.GET("/subjective-submissions", h.listSubjectiveSubmissions)
+				teacher.GET("/subjective-submissions/:id", h.getSubjectiveSubmission)
+				teacher.POST("/subjective-submissions/:id/grade", h.gradeSubjectiveSubmission)
+				teacher.GET("/subjective-pending-count", h.subjectivePendingCount)
 			}
 
 			student := authed.Group("/student", middleware.RequireRole(models.RoleStudent))
@@ -79,6 +93,12 @@ func (h *HTTPHandler) Router() *gin.Engine {
 				student.POST("/submit", h.submit)
 				student.GET("/mistakes", h.studentMistakes)
 				student.GET("/attempts", h.studentAttempts)
+
+				student.GET("/subjective-questions", h.studentSubjectiveQuestions)
+				student.GET("/subjective-questions/:id", h.studentSubjectiveQuestion)
+				student.POST("/subjective-submit", h.studentSubjectiveSubmit)
+				student.GET("/subjective-submissions", h.studentSubjectiveSubmissions)
+				student.GET("/subjective-submissions/:id", h.studentSubjectiveSubmission)
 			}
 		}
 	}
@@ -315,6 +335,216 @@ func (h *HTTPHandler) studentAttempts(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
+func (h *HTTPHandler) listSubjectiveQuestions(c *gin.Context) {
+	questions, err := h.subjectiveSvc.ListQuestions()
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, questions)
+}
+
+func (h *HTTPHandler) getSubjectiveQuestion(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid question id"})
+		return
+	}
+	question, err := h.subjectiveSvc.GetQuestion(uint(id))
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, question)
+}
+
+func (h *HTTPHandler) createSubjectiveQuestion(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	var req dto.SubjectiveQuestionInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid payload"})
+		return
+	}
+	question, err := h.subjectiveSvc.CreateQuestion(req, claims.UserID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, question)
+}
+
+func (h *HTTPHandler) updateSubjectiveQuestion(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid question id"})
+		return
+	}
+	var req dto.SubjectiveQuestionInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid payload"})
+		return
+	}
+	question, err := h.subjectiveSvc.UpdateQuestion(uint(id), req)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, question)
+}
+
+func (h *HTTPHandler) deleteSubjectiveQuestion(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid question id"})
+		return
+	}
+	if err := h.subjectiveSvc.DeleteQuestion(uint(id)); err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "question deleted"})
+}
+
+func (h *HTTPHandler) listSubjectiveSubmissions(c *gin.Context) {
+	var filter dto.SubjectiveSubmissionFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid filter"})
+		return
+	}
+	submissions, total, err := h.subjectiveSvc.ListSubmissions(filter)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": submissions, "total": total, "page": filter.Page, "pageSize": filter.PageSize})
+}
+
+func (h *HTTPHandler) getSubjectiveSubmission(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid submission id"})
+		return
+	}
+	submission, err := h.subjectiveSvc.GetSubmission(uint(id))
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, submission)
+}
+
+func (h *HTTPHandler) gradeSubjectiveSubmission(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid submission id"})
+		return
+	}
+	var req dto.SubjectiveGradeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid grade payload"})
+		return
+	}
+	submission, err := h.subjectiveSvc.GradeSubmission(uint(id), claims.UserID, req)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, submission)
+}
+
+func (h *HTTPHandler) subjectivePendingCount(c *gin.Context) {
+	count, err := h.subjectiveSvc.GetPendingCount()
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"count": count})
+}
+
+func (h *HTTPHandler) studentSubjectiveQuestions(c *gin.Context) {
+	questions, err := h.subjectiveSvc.StudentListQuestions()
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, questions)
+}
+
+func (h *HTTPHandler) studentSubjectiveQuestion(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid question id"})
+		return
+	}
+	question, err := h.subjectiveSvc.GetStudentQuestion(uint(id))
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, question)
+}
+
+func (h *HTTPHandler) studentSubjectiveSubmit(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	var req dto.SubjectiveSubmitRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid submit payload"})
+		return
+	}
+	submission, err := h.subjectiveSvc.SubmitAnswer(claims.UserID, req)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, submission)
+}
+
+func (h *HTTPHandler) studentSubjectiveSubmissions(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	submissions, err := h.subjectiveSvc.GetStudentSubmissions(claims.UserID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, submissions)
+}
+
+func (h *HTTPHandler) studentSubjectiveSubmission(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid submission id"})
+		return
+	}
+	submission, err := h.subjectiveSvc.GetStudentSubmission(claims.UserID, uint(id))
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, submission)
+}
+
 func (h *HTTPHandler) respondServiceError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrUserExists):
@@ -327,6 +557,14 @@ func (h *HTTPHandler) respondServiceError(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 	case errors.Is(err, service.ErrNoQuestions):
 		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrSubjectiveQuestionNotFound), errors.Is(err, service.ErrSubjectiveSubmissionNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrInvalidScore), errors.Is(err, service.ErrScoreExceedsFull), errors.Is(err, service.ErrQuestionInactive):
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrAlreadyGraded), errors.Is(err, service.ErrSubmissionExists):
+		c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrConcurrentUpdate):
+		c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
 	default:
 		h.log.Error("service error", "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})

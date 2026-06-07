@@ -5,6 +5,10 @@ import { apiRequest } from './api/client';
 import { AuthPage } from './pages/AuthPage';
 import { StudentDashboard } from './pages/StudentDashboard';
 import { TeacherDashboard } from './pages/TeacherDashboard';
+import { TeacherSubjectivePage } from './pages/TeacherSubjectivePage';
+import { TeacherGradingPage } from './pages/TeacherGradingPage';
+import { StudentSubjectivePage } from './pages/StudentSubjectivePage';
+import { StudentMySubjectivePage } from './pages/StudentMySubjectivePage';
 
 const TOKEN_KEY = 'quizlab_token_3130';
 
@@ -14,6 +18,8 @@ export default function App() {
   const [classes, setClasses] = useState([]);
   const [initializing, setInitializing] = useState(true);
   const [authLoading, setAuthLoading] = useState(false);
+  const [teacherPage, setTeacherPage] = useState('dashboard');
+  const [studentPage, setStudentPage] = useState('dashboard');
 
   const loadClasses = async () => {
     try {
@@ -73,6 +79,8 @@ export default function App() {
     localStorage.removeItem(TOKEN_KEY);
     setToken('');
     setUser(null);
+    setTeacherPage('dashboard');
+    setStudentPage('dashboard');
     toast.success('已退出登录');
   };
 
@@ -88,15 +96,83 @@ export default function App() {
     );
   }
 
+  const renderTeacherPage = () => {
+    switch (teacherPage) {
+      case 'subjective':
+        return (
+          <TeacherSubjectivePage
+            user={user}
+            token={token}
+            onLogout={handleLogout}
+            onNavigateToGrading={() => setTeacherPage('grading')}
+          />
+        );
+      case 'grading':
+        return (
+          <TeacherGradingPage
+            user={user}
+            token={token}
+            onLogout={handleLogout}
+            onNavigateToQuestions={() => setTeacherPage('subjective')}
+          />
+        );
+      case 'dashboard':
+      default:
+        return (
+          <TeacherDashboard
+            user={user}
+            token={token}
+            onLogout={handleLogout}
+            onNavigateToSubjective={() => setTeacherPage('subjective')}
+            onNavigateToGrading={() => setTeacherPage('grading')}
+          />
+        );
+    }
+  };
+
+  const renderStudentPage = () => {
+    switch (studentPage) {
+      case 'subjective':
+        return (
+          <StudentSubjectivePage
+            user={user}
+            token={token}
+            onLogout={handleLogout}
+            onNavigateToMy={() => setStudentPage('mySubjective')}
+          />
+        );
+      case 'mySubjective':
+        return (
+          <StudentMySubjectivePage
+            user={user}
+            token={token}
+            onLogout={handleLogout}
+            onNavigateToPractice={() => setStudentPage('subjective')}
+          />
+        );
+      case 'dashboard':
+      default:
+        return (
+          <StudentDashboard
+            user={user}
+            token={token}
+            onLogout={handleLogout}
+            onNavigateToSubjective={() => setStudentPage('subjective')}
+            onNavigateToMySubjective={() => setStudentPage('mySubjective')}
+          />
+        );
+    }
+  };
+
   return (
     <>
       <Toaster position="top-right" toastOptions={{ duration: 2400 }} />
       {!user ? (
         <AuthPage classes={classes} onLogin={handleLogin} onRegister={handleRegister} loading={authLoading} />
       ) : user.role === 'teacher' ? (
-        <TeacherDashboard user={user} token={token} onLogout={handleLogout} />
+        renderTeacherPage()
       ) : (
-        <StudentDashboard user={user} token={token} onLogout={handleLogout} />
+        renderStudentPage()
       )}
     </>
   );

@@ -29,3 +29,65 @@ export async function apiRequest(path, { method = 'GET', token, body, isForm = f
 
   return parseResponse(response);
 }
+
+export async function getSubjectiveQuestions(token) {
+  return apiRequest('/teacher/subjective-questions', { token });
+}
+
+export async function getSubjectiveQuestion(id, token) {
+  return apiRequest(`/teacher/subjective-questions/${id}`, { token });
+}
+
+export async function createSubjectiveQuestion(data, token) {
+  return apiRequest('/teacher/subjective-questions', { method: 'POST', token, body: data });
+}
+
+export async function updateSubjectiveQuestion(id, data, token) {
+  return apiRequest(`/teacher/subjective-questions/${id}`, { method: 'PUT', token, body: data });
+}
+
+export async function deleteSubjectiveQuestion(id, token) {
+  return apiRequest(`/teacher/subjective-questions/${id}`, { method: 'DELETE', token });
+}
+
+export async function getSubjectiveSubmissions(params, token) {
+  const query = new URLSearchParams();
+  if (params.classId) query.set('classId', params.classId);
+  if (params.questionId) query.set('questionId', params.questionId);
+  if (params.status) query.set('status', params.status);
+  if (params.page) query.set('page', params.page);
+  if (params.pageSize) query.set('pageSize', params.pageSize);
+  return apiRequest(`/teacher/subjective-submissions?${query.toString()}`, { token });
+}
+
+export async function getSubjectiveSubmission(id, token) {
+  return apiRequest(`/teacher/subjective-submissions/${id}`, { token });
+}
+
+export async function gradeSubjectiveSubmission(id, data, token) {
+  return apiRequest(`/teacher/subjective-submissions/${id}/grade`, { method: 'POST', token, body: data });
+}
+
+export async function getSubjectivePendingCount(token) {
+  return apiRequest('/teacher/subjective-pending-count', { token });
+}
+
+export async function getStudentSubjectiveQuestions(token) {
+  return apiRequest('/student/subjective-questions', { token });
+}
+
+export async function getStudentSubjectiveQuestion(id, token) {
+  return apiRequest(`/student/subjective-questions/${id}`, { token });
+}
+
+export async function submitSubjectiveAnswer(data, token) {
+  return apiRequest('/student/subjective-submit', { method: 'POST', token, body: data });
+}
+
+export async function getStudentSubjectiveSubmissions(token) {
+  return apiRequest('/student/subjective-submissions', { token });
+}
+
+export async function getStudentSubjectiveSubmission(id, token) {
+  return apiRequest(`/student/subjective-submissions/${id}`, { token });
+}

@@ -34,3 +34,28 @@ type SubmitAnswerItem struct {
 type SubmitRequest struct {
 	Answers []SubmitAnswerItem `json:"answers" binding:"required,min=1,dive"`
 }
+
+type SubjectiveQuestionInput struct {
+	Title           string  `json:"title" binding:"required,min=2"`
+	ReferenceAnswer string  `json:"referenceAnswer"`
+	FullScore       float64 `json:"fullScore" binding:"required,min=0.01"`
+	Status          string  `json:"status"`
+}
+
+type SubjectiveSubmitRequest struct {
+	QuestionID uint   `json:"questionId" binding:"required"`
+	Content    string `json:"content" binding:"required,min=1"`
+}
+
+type SubjectiveGradeRequest struct {
+	Score   float64 `json:"score" binding:"required,min=0"`
+	Comment string  `json:"comment"`
+}
+
+type SubjectiveSubmissionFilter struct {
+	ClassID    *uint  `form:"classId"`
+	QuestionID *uint  `form:"questionId"`
+	Status     string `form:"status"`
+	Page       int    `form:"page,default=1"`
+	PageSize   int    `form:"pageSize,default=20"`
+}

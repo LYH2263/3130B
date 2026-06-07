@@ -6,7 +6,7 @@ import { QuestionEditorModal } from '../components/QuestionEditorModal';
 import { StatCard } from '../components/StatCard';
 import { questionSchema } from '../utils/validators';
 
-export function TeacherDashboard({ user, token, onLogout }) {
+export function TeacherDashboard({ user, token, onLogout, onNavigateToSubjective, onNavigateToGrading }) {
   const [overview, setOverview] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [stats, setStats] = useState([]);
@@ -133,9 +133,15 @@ export function TeacherDashboard({ user, token, onLogout }) {
           <h1 className="mt-1 text-2xl font-bold text-slate-800">教师机管理员面板</h1>
           <p className="text-sm text-slate-600">题库修改后学生机拉取即同步。</p>
         </div>
-        <div className="flex gap-2">
-          <button className="btn btn-outline btn-primary" onClick={loadDashboard}>
+        <div className="flex flex-wrap gap-2">
+          <button className="btn btn-outline btn-secondary" onClick={loadDashboard}>
             刷新看板
+          </button>
+          <button className="btn btn-outline btn-amber" onClick={onNavigateToSubjective}>
+            主观题管理
+          </button>
+          <button className="btn btn-outline btn-warning" onClick={onNavigateToGrading}>
+            批改工作台
           </button>
           <button className="btn btn-neutral" onClick={onLogout}>
             退出登录
