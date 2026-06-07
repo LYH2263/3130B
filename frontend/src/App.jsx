@@ -16,6 +16,7 @@ import { PkLobbyPage } from './pages/PkLobbyPage';
 import { PkGamePage } from './pages/PkGamePage';
 import { TeacherReportPage } from './pages/TeacherReportPage';
 import { TeacherProctorPage } from './pages/TeacherProctorPage';
+import { TeacherPaperPage } from './pages/TeacherPaperPage';
 
 const TOKEN_KEY = 'quizlab_token_3130';
 
@@ -173,6 +174,14 @@ export default function App() {
             classes={classes}
           />
         );
+      case 'paper':
+        return (
+          <TeacherPaperPage
+            user={user}
+            token={token}
+            onLogout={handleLogout}
+          />
+        );
       case 'dashboard':
       default:
         return (
@@ -185,6 +194,7 @@ export default function App() {
             onNavigateToExam={() => setTeacherPage('exam')}
             onNavigateToReport={() => setTeacherPage('report')}
             onNavigateToProctor={() => setTeacherPage('proctor')}
+            onNavigateToPaper={() => setTeacherPage('paper')}
           />
         );
     }

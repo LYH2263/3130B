@@ -348,3 +348,60 @@ export async function saveProctorExamConfig(examId, data, token) {
     body: data,
   });
 }
+
+export async function getPaperBlueprints(params, token) {
+  const query = new URLSearchParams();
+  if (params?.keyword) query.set('keyword', params.keyword);
+  if (params?.page) query.set('page', params.page);
+  if (params?.pageSize) query.set('pageSize', params.pageSize);
+  return apiRequest(`/teacher/paper/blueprints?${query.toString()}`, { token });
+}
+
+export async function getPaperBlueprint(id, token) {
+  return apiRequest(`/teacher/paper/blueprints/${id}`, { token });
+}
+
+export async function createPaperBlueprint(data, token) {
+  return apiRequest('/teacher/paper/blueprints', { method: 'POST', token, body: data });
+}
+
+export async function updatePaperBlueprint(id, data, token) {
+  return apiRequest(`/teacher/paper/blueprints/${id}`, { method: 'PUT', token, body: data });
+}
+
+export async function deletePaperBlueprint(id, token) {
+  return apiRequest(`/teacher/paper/blueprints/${id}`, { method: 'DELETE', token });
+}
+
+export async function generatePaper(blueprintId, token) {
+  return apiRequest('/teacher/paper/generate', { method: 'POST', token, body: { blueprintId } });
+}
+
+export async function replacePaperQuestion(blueprintId, currentQuestionId, token) {
+  return apiRequest('/teacher/paper/replace', { method: 'POST', token, body: { blueprintId, currentQuestionId } });
+}
+
+export async function savePaperSnapshot(data, token) {
+  return apiRequest('/teacher/paper/save', { method: 'POST', token, body: data });
+}
+
+export async function getPaperSnapshots(params, token) {
+  const query = new URLSearchParams();
+  if (params?.keyword) query.set('keyword', params.keyword);
+  if (params?.status) query.set('status', params.status);
+  if (params?.page) query.set('page', params.page);
+  if (params?.pageSize) query.set('pageSize', params.pageSize);
+  return apiRequest(`/teacher/paper/snapshots?${query.toString()}`, { token });
+}
+
+export async function getPaperSnapshot(id, token) {
+  return apiRequest(`/teacher/paper/snapshots/${id}`, { token });
+}
+
+export async function deletePaperSnapshot(id, token) {
+  return apiRequest(`/teacher/paper/snapshots/${id}`, { method: 'DELETE', token });
+}
+
+export async function getKnowledgeTags(token) {
+  return apiRequest('/teacher/paper/knowledge-tags', { token });
+}

@@ -52,4 +52,12 @@ var (
 	ErrProctorInvalidEvent  = errors.New("invalid proctor event type")
 	ErrProctorConfigNotFound = errors.New("proctor config not found")
 	ErrProctorAlreadySubmitted = errors.New("exam already submitted, cannot report events")
+
+	ErrPaperBlueprintNotFound = errors.New("paper blueprint not found")
+	ErrPaperSnapshotNotFound  = errors.New("paper snapshot not found")
+	ErrPaperInvalidRule       = errors.New("invalid paper generation rule")
+	ErrPaperInsufficientQuestions = errors.New("insufficient questions to generate paper")
+	ErrPaperQuestionNotFound  = errors.New("replacement question not found")
+	ErrPaperInvalidIndex      = errors.New("invalid question index")
+	ErrPaperQuestionExcluded  = errors.New("no available replacement question")
 )

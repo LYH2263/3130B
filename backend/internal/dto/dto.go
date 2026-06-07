@@ -377,3 +377,119 @@ type ProctorEventBrief struct {
 	EventTime string `json:"eventTime"`
 	Severity  string `json:"severity"`
 }
+
+type DifficultyRuleInput struct {
+	Level string  `json:"level" binding:"required,oneof=easy medium hard"`
+	Count int     `json:"count" binding:"min=0"`
+	Ratio float64 `json:"ratio" binding:"min=0,max=1"`
+}
+
+type QuestionTypeRuleInput struct {
+	Type  string  `json:"type" binding:"required,oneof=single_choice multiple_choice true_false"`
+	Count int     `json:"count" binding:"min=0"`
+	Ratio float64 `json:"ratio" binding:"min=0,max=1"`
+}
+
+type KnowledgeTagRuleInput struct {
+	Tag   string  `json:"tag" binding:"required,min=1,max=64"`
+	Count int     `json:"count" binding:"min=0"`
+	Ratio float64 `json:"ratio" binding:"min=0,max=1"`
+}
+
+type PaperRuleInput struct {
+	TotalQuestions    int                     `json:"totalQuestions" binding:"required,min=1"`
+	Difficulty        []DifficultyRuleInput   `json:"difficulty"`
+	QuestionTypes     []QuestionTypeRuleInput `json:"questionTypes"`
+	KnowledgeTags     []KnowledgeTagRuleInput `json:"knowledgeTags"`
+	PerQuestionScore  int                     `json:"perQuestionScore" binding:"min=1"`
+}
+
+type PaperBlueprintCreateInput struct {
+	Name            string          `json:"name" binding:"required,min=1,max=128"`
+	Description     string          `json:"description" binding:"max=1000"`
+	TotalScore      int             `json:"totalScore" binding:"required,min=1"`
+	Rule            PaperRuleInput  `json:"rule" binding:"required"`
+	AvoidRepeatDays int             `json:"avoidRepeatDays" binding:"min=0"`
+}
+
+type PaperBlueprintUpdateInput struct {
+	Name            string          `json:"name" binding:"omitempty,min=1,max=128"`
+	Description     string          `json:"description" binding:"omitempty,max=1000"`
+	TotalScore      int             `json:"totalScore" binding:"omitempty,min=1"`
+	Rule            *PaperRuleInput `json:"rule"`
+	AvoidRepeatDays int             `json:"avoidRepeatDays" binding:"omitempty,min=0"`
+}
+
+type PaperBlueprintFilter struct {
+	Page     int    `form:"page,default=1"`
+	PageSize int    `form:"pageSize,default=20"`
+	Keyword  string `form:"keyword"`
+}
+
+type PaperGenerateRequest struct {
+	BlueprintID uint `json:"blueprintId" binding:"required"`
+}
+
+type PaperReplaceQuestionRequest struct {
+	BlueprintID uint `json:"blueprintId" binding:"required"`
+	CurrentQuestionID uint `json:"currentQuestionId" binding:"required"`
+}
+
+type PaperSaveRequest struct {
+	Name        string `json:"name" binding:"required,min=1,max=128"`
+	Description string `json:"description" binding:"max=1000"`
+	Status      string `json:"status" binding:"omitempty,oneof=draft published"`
+}
+
+type PaperSnapshotFilter struct {
+	Page     int    `form:"page,default=1"`
+	PageSize int    `form:"pageSize,default=20"`
+	Keyword  string `form:"keyword"`
+	Status   string `form:"status"`
+}
+
+type KnowledgeTagOption struct {
+	Tag   string `json:"tag"`
+	Count int    `json:"count"`
+}
+
+type PaperGenerateResult struct {
+	BlueprintID uint                `json:"blueprintId"`
+	Questions   []PaperQuestionItem `json:"questions"`
+	TotalScore  int                 `json:"totalScore"`
+	GapReport   *PaperGapReport     `json:"gapReport,omitempty"`
+}
+
+type PaperQuestionItem struct {
+	QuestionID   uint              `json:"questionId"`
+	Title        string            `json:"title"`
+	Description  string            `json:"description"`
+	Options      []StudentOption   `json:"options"`
+	Difficulty   string            `json:"difficulty"`
+	QuestionType string            `json:"questionType"`
+	KnowledgeTags string           `json:"knowledgeTags"`
+	Score        int               `json:"score"`
+}
+
+type StudentOption struct {
+	ID      uint   `json:"id"`
+	Content string `json:"content"`
+}
+
+type PaperGapReport struct {
+	TotalNeeded      int       `json:"totalNeeded"`
+	TotalAvailable   int       `json:"totalAvailable"`
+	DifficultyGaps   []GapItem `json:"difficultyGaps"`
+	QuestionTypeGaps []GapItem `json:"questionTypeGaps"`
+	KnowledgeTagGaps []GapItem `json:"knowledgeTagGaps"`
+	CanGenerate      bool      `json:"canGenerate"`
+	Messages         []string  `json:"messages"`
+}
+
+type GapItem struct {
+	Name      string `json:"name"`
+	Label     string `json:"label"`
+	Needed    int    `json:"needed"`
+	Available int    `json:"available"`
+	Gap       int    `json:"gap"`
+}

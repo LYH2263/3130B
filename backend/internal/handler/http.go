@@ -30,6 +30,7 @@ type HTTPHandler struct {
 	pkSvc              *service.PkService
 	exportSvc          *service.ExportService
 	proctorSvc         *service.ProctorService
+	paperSvc           *service.PaperService
 	tokens             *auth.TokenManager
 	log                *slog.Logger
 	wsUpgrader         *websocket.Upgrader
@@ -47,6 +48,7 @@ func New(
 	pkSvc *service.PkService,
 	exportSvc *service.ExportService,
 	proctorSvc *service.ProctorService,
+	paperSvc *service.PaperService,
 	tokens *auth.TokenManager,
 	log *slog.Logger,
 ) *HTTPHandler {
@@ -69,6 +71,7 @@ func New(
 		pkSvc:              pkSvc,
 		exportSvc:          exportSvc,
 		proctorSvc:         proctorSvc,
+		paperSvc:           paperSvc,
 		tokens:             tokens,
 		log:                log,
 		wsUpgrader:         upgrader,
@@ -141,6 +144,22 @@ func (h *HTTPHandler) Router() *gin.Engine {
 				teacher.PUT("/proctor/config", h.saveProctorConfig)
 				teacher.GET("/proctor/exams/:id/config", h.getProctorExamConfig)
 				teacher.PUT("/proctor/exams/:id/config", h.saveProctorExamConfig)
+
+				teacher.GET("/paper/blueprints", h.listPaperBlueprints)
+				teacher.GET("/paper/blueprints/:id", h.getPaperBlueprint)
+				teacher.POST("/paper/blueprints", h.createPaperBlueprint)
+				teacher.PUT("/paper/blueprints/:id", h.updatePaperBlueprint)
+				teacher.DELETE("/paper/blueprints/:id", h.deletePaperBlueprint)
+
+				teacher.POST("/paper/generate", h.generatePaper)
+				teacher.POST("/paper/replace", h.replacePaperQuestion)
+				teacher.POST("/paper/save", h.savePaperSnapshot)
+
+				teacher.GET("/paper/snapshots", h.listPaperSnapshots)
+				teacher.GET("/paper/snapshots/:id", h.getPaperSnapshot)
+				teacher.DELETE("/paper/snapshots/:id", h.deletePaperSnapshot)
+
+				teacher.GET("/paper/knowledge-tags", h.getKnowledgeTags)
 			}
 
 			student := authed.Group("/student", middleware.RequireRole(models.RoleStudent))
@@ -730,6 +749,13 @@ func (h *HTTPHandler) respondServiceError(c *gin.Context, err error) {
 		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
 	case errors.Is(err, service.ErrProctorAlreadySubmitted):
 		c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrPaperBlueprintNotFound), errors.Is(err, service.ErrPaperSnapshotNotFound),
+		errors.Is(err, service.ErrPaperQuestionNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrPaperInvalidRule), errors.Is(err, service.ErrPaperInvalidIndex):
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrPaperInsufficientQuestions), errors.Is(err, service.ErrPaperQuestionExcluded):
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 	default:
 		h.log.Error("service error", "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
@@ -1547,4 +1573,194 @@ func (h *HTTPHandler) saveProctorExamConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, config)
+}
+
+func (h *HTTPHandler) listPaperBlueprints(c *gin.Context) {
+	var filter dto.PaperBlueprintFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid filter"})
+		return
+	}
+	items, total, err := h.paperSvc.ListBlueprints(filter)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "page": filter.Page, "pageSize": filter.PageSize})
+}
+
+func (h *HTTPHandler) getPaperBlueprint(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid blueprint id"})
+		return
+	}
+	blueprint, err := h.paperSvc.GetBlueprint(uint(id))
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, blueprint)
+}
+
+func (h *HTTPHandler) createPaperBlueprint(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	var req dto.PaperBlueprintCreateInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid payload"})
+		return
+	}
+	blueprint, err := h.paperSvc.CreateBlueprint(req, claims.UserID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, blueprint)
+}
+
+func (h *HTTPHandler) updatePaperBlueprint(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid blueprint id"})
+		return
+	}
+	var req dto.PaperBlueprintUpdateInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid payload"})
+		return
+	}
+	blueprint, err := h.paperSvc.UpdateBlueprint(uint(id), req)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, blueprint)
+}
+
+func (h *HTTPHandler) deletePaperBlueprint(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid blueprint id"})
+		return
+	}
+	if err := h.paperSvc.DeleteBlueprint(uint(id)); err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "blueprint deleted"})
+}
+
+func (h *HTTPHandler) generatePaper(c *gin.Context) {
+	var req dto.PaperGenerateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid payload"})
+		return
+	}
+	result, err := h.paperSvc.GeneratePaper(req.BlueprintID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *HTTPHandler) replacePaperQuestion(c *gin.Context) {
+	var req dto.PaperReplaceQuestionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid payload"})
+		return
+	}
+	replacement, err := h.paperSvc.GetReplacementQuestion(req.CurrentQuestionID, req.BlueprintID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, replacement)
+}
+
+func (h *HTTPHandler) savePaperSnapshot(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+
+	var req struct {
+		BlueprintID *uint                  `json:"blueprintId"`
+		Questions   []dto.PaperQuestionItem `json:"questions" binding:"required,min=1,dive"`
+		Name        string                 `json:"name" binding:"required,min=1,max=128"`
+		Description string                 `json:"description" binding:"max=1000"`
+		Status      string                 `json:"status" binding:"omitempty,oneof=draft published"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid payload"})
+		return
+	}
+
+	saveReq := dto.PaperSaveRequest{
+		Name:        req.Name,
+		Description: req.Description,
+		Status:      req.Status,
+	}
+
+	snapshot, err := h.paperSvc.SavePaperSnapshot(req.BlueprintID, req.Questions, saveReq, claims.UserID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, snapshot)
+}
+
+func (h *HTTPHandler) listPaperSnapshots(c *gin.Context) {
+	var filter dto.PaperSnapshotFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid filter"})
+		return
+	}
+	items, total, err := h.paperSvc.ListSnapshots(filter)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "page": filter.Page, "pageSize": filter.PageSize})
+}
+
+func (h *HTTPHandler) getPaperSnapshot(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid snapshot id"})
+		return
+	}
+	snapshot, err := h.paperSvc.GetSnapshot(uint(id))
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, snapshot)
+}
+
+func (h *HTTPHandler) deletePaperSnapshot(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid snapshot id"})
+		return
+	}
+	if err := h.paperSvc.DeleteSnapshot(uint(id)); err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "snapshot deleted"})
+}
+
+func (h *HTTPHandler) getKnowledgeTags(c *gin.Context) {
+	tags, err := h.paperSvc.GetKnowledgeTags()
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, tags)
 }

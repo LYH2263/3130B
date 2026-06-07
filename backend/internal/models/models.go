@@ -26,13 +26,16 @@ type User struct {
 }
 
 type Question struct {
-	ID          uint             `gorm:"primaryKey" json:"id"`
-	Title       string           `gorm:"type:text;not null" json:"title"`
-	Description string           `gorm:"type:text" json:"description"`
-	CreatedBy   uint             `gorm:"index" json:"createdBy"`
-	Options     []QuestionOption `json:"options"`
-	CreatedAt   time.Time        `json:"createdAt"`
-	UpdatedAt   time.Time        `json:"updatedAt"`
+	ID            uint             `gorm:"primaryKey" json:"id"`
+	Title         string           `gorm:"type:text;not null" json:"title"`
+	Description   string           `gorm:"type:text" json:"description"`
+	CreatedBy     uint             `gorm:"index" json:"createdBy"`
+	Options       []QuestionOption `json:"options"`
+	Difficulty    string           `gorm:"size:16;default:medium;index" json:"difficulty"`
+	QuestionType  string           `gorm:"size:32;default:single_choice;index" json:"questionType"`
+	KnowledgeTags string           `gorm:"type:text" json:"knowledgeTags"`
+	CreatedAt     time.Time        `json:"createdAt"`
+	UpdatedAt     time.Time        `json:"updatedAt"`
 }
 
 type QuestionOption struct {
@@ -453,4 +456,132 @@ func DefaultProctorConfig() ProctorConfig {
 		AutoMarkSuspicious:  true,
 		Enabled:             true,
 	}
+}
+
+const (
+	DifficultyEasy   = "easy"
+	DifficultyMedium = "medium"
+	DifficultyHard   = "hard"
+)
+
+const (
+	QuestionTypeSingleChoice = "single_choice"
+	QuestionTypeMultipleChoice = "multiple_choice"
+	QuestionTypeTrueFalse = "true_false"
+)
+
+var DifficultyLabelMap = map[string]string{
+	DifficultyEasy:   "易",
+	DifficultyMedium: "中",
+	DifficultyHard:   "难",
+}
+
+var QuestionTypeLabelMap = map[string]string{
+	QuestionTypeSingleChoice:   "单选题",
+	QuestionTypeMultipleChoice: "多选题",
+	QuestionTypeTrueFalse:      "判断题",
+}
+
+type PaperBlueprint struct {
+	ID              uint      `gorm:"primaryKey" json:"id"`
+	Name            string    `gorm:"size:128;not null" json:"name"`
+	Description     string    `gorm:"type:text" json:"description"`
+	TotalScore      int       `gorm:"not null;default:100" json:"totalScore"`
+	RuleJSON        string    `gorm:"type:longtext;not null" json:"-"`
+	RuleData        *PaperRule `gorm:"-" json:"rule"`
+	AvoidRepeatDays int       `gorm:"not null;default:0" json:"avoidRepeatDays"`
+	CreatedBy       uint      `gorm:"index;not null" json:"createdBy"`
+	Creator         *User     `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+}
+
+func (PaperBlueprint) TableName() string {
+	return "paper_blueprints"
+}
+
+type PaperRule struct {
+	TotalQuestions int                 `json:"totalQuestions"`
+	Difficulty     []DifficultyRule    `json:"difficulty"`
+	QuestionTypes  []QuestionTypeRule  `json:"questionTypes"`
+	KnowledgeTags  []KnowledgeTagRule  `json:"knowledgeTags"`
+	PerQuestionScore int                `json:"perQuestionScore"`
+}
+
+type DifficultyRule struct {
+	Level string `json:"level"`
+	Count int    `json:"count"`
+	Ratio float64 `json:"ratio"`
+}
+
+type QuestionTypeRule struct {
+	Type  string `json:"type"`
+	Count int    `json:"count"`
+	Ratio float64 `json:"ratio"`
+}
+
+type KnowledgeTagRule struct {
+	Tag   string `json:"tag"`
+	Count int    `json:"count"`
+	Ratio float64 `json:"ratio"`
+}
+
+type PaperSnapshot struct {
+	ID           uint              `gorm:"primaryKey" json:"id"`
+	BlueprintID  *uint             `gorm:"index" json:"blueprintId"`
+	Blueprint    *PaperBlueprint   `gorm:"foreignKey:BlueprintID" json:"blueprint,omitempty"`
+	Name         string            `gorm:"size:128;not null" json:"name"`
+	Description  string            `gorm:"type:text" json:"description"`
+	TotalScore   int               `gorm:"not null;default:100" json:"totalScore"`
+	TotalQuestions int             `gorm:"not null;default:0" json:"totalQuestions"`
+	QuestionsJSON string           `gorm:"type:longtext;not null" json:"-"`
+	QuestionItems []PaperQuestionItem `gorm:"-" json:"questions"`
+	Status       string            `gorm:"size:16;not null;default:draft;index" json:"status"`
+	CreatedBy    uint              `gorm:"index;not null" json:"createdBy"`
+	Creator      *User             `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`
+	CreatedAt    time.Time         `json:"createdAt"`
+	UpdatedAt    time.Time         `json:"updatedAt"`
+}
+
+func (PaperSnapshot) TableName() string {
+	return "paper_snapshots"
+}
+
+const (
+	PaperStatusDraft    = "draft"
+	PaperStatusPublished = "published"
+)
+
+type PaperQuestionItem struct {
+	QuestionID   uint              `json:"questionId"`
+	Title        string            `json:"title"`
+	Description  string            `json:"description"`
+	Options      []StudentOption   `json:"options"`
+	Difficulty   string            `json:"difficulty"`
+	QuestionType string            `json:"questionType"`
+	KnowledgeTags string           `json:"knowledgeTags"`
+	Score        int               `json:"score"`
+}
+
+type StudentOption struct {
+	ID      uint   `json:"id"`
+	Content string `json:"content"`
+}
+
+type PaperGapReport struct {
+	TotalNeeded   int            `json:"totalNeeded"`
+	TotalAvailable int           `json:"totalAvailable"`
+	DifficultyGaps []GapItem     `json:"difficultyGaps"`
+	QuestionTypeGaps []GapItem   `json:"questionTypeGaps"`
+	KnowledgeTagGaps []GapItem   `json:"knowledgeTagGaps"`
+	CanGenerate   bool           `json:"canGenerate"`
+	Messages      []string       `json:"messages"`
+}
+
+type GapItem struct {
+	Name     string `json:"name"`
+	Label    string `json:"label"`
+	Needed   int    `json:"needed"`
+	Available int   `json:"available"`
+	Gap      int    `json:"gap"`
 }
