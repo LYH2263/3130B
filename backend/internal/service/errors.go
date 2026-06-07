@@ -46,4 +46,10 @@ var (
 
 	ErrVersionNotFound  = errors.New("version not found")
 	ErrVersionMismatch  = errors.New("version does not belong to this question")
+
+	ErrProctorDisabled      = errors.New("proctor monitoring is disabled for this exam")
+	ErrProctorRateLimit     = errors.New("too many proctor events, please slow down")
+	ErrProctorInvalidEvent  = errors.New("invalid proctor event type")
+	ErrProctorConfigNotFound = errors.New("proctor config not found")
+	ErrProctorAlreadySubmitted = errors.New("exam already submitted, cannot report events")
 )

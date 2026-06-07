@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { toast } from 'react-hot-toast';
 
 import { enterExam, submitExam, getExamResult } from '../api/client';
+import { useProctor } from '../utils/useProctor';
 
 function formatDateTime(dateStr) {
   if (!dateStr) return '';
@@ -34,6 +35,16 @@ export function ExamPage({ exam, token, onBack, onFinish }) {
   const [loading, setLoading] = useState(false);
   const [examData, setExamData] = useState(exam);
   const [participantData, setParticipantData] = useState(null);
+  const [showProctorWarning, setShowProctorWarning] = useState(false);
+  const [showForceSubmitModal, setShowForceSubmitModal] = useState(false);
+  const examContainerRef = useRef(null);
+
+  const proctor = useProctor(exam.id, token, {
+    enabled: true,
+    onForceSubmit: () => {
+      setShowForceSubmitModal(true);
+    },
+  });
 
   const handleStartExam = useCallback(async () => {
     setLoading(true);
@@ -69,6 +80,23 @@ export function ExamPage({ exam, token, onBack, onFinish }) {
       setLoading(false);
     }
   }, [exam.id, token, onBack]);
+
+  useEffect(() => {
+    if (phase === 'exam') {
+      proctor.startMonitoring();
+      proctor.requestFullscreen(examContainerRef.current);
+    } else if (phase === 'result') {
+      proctor.stopMonitoring();
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+    return () => {
+      if (phase === 'exam') {
+        proctor.stopMonitoring();
+      }
+    };
+  }, [phase, proctor]);
 
   useEffect(() => {
     if (phase !== 'countdown') return;
@@ -250,8 +278,12 @@ export function ExamPage({ exam, token, onBack, onFinish }) {
   }
 
   if (phase === 'exam') {
+    const { status: proctorStatus } = proctor;
+    const isWarning = proctorStatus.status === 'warning' || proctorStatus.status === 'suspicious';
+    const isDanger = proctorStatus.status === 'force_submitted';
+
     return (
-      <div className="min-h-screen bg-board">
+      <div className="min-h-screen bg-board" ref={examContainerRef}>
         <div className="sticky top-0 z-10 border-b border-white/50 bg-white/90 backdrop-blur">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
             <div>
@@ -261,6 +293,35 @@ export function ExamPage({ exam, token, onBack, onFinish }) {
               </p>
             </div>
             <div className="flex items-center gap-4">
+              <div
+                className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium ${
+                  isDanger
+                    ? 'bg-red-100 text-red-700'
+                    : isWarning
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-green-100 text-green-700'
+                }`}
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+                <span>
+                  违规：{proctorStatus.violationScore} / {proctorStatus.warningThreshold}
+                </span>
+                <span className="text-xs opacity-75">
+                  (剩余 {proctorStatus.remainingWarns} 次)
+                </span>
+              </div>
               <div
                 className={`rounded-full px-4 py-2 font-mono text-lg font-bold ${
                   timeLeft < 300 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-700'
@@ -283,6 +344,11 @@ export function ExamPage({ exam, token, onBack, onFinish }) {
               style={{ width: `${progress}%` }}
             />
           </div>
+          {proctor.showWarning && (
+            <div className="animate-pulse bg-amber-500 px-4 py-2 text-center text-sm font-medium text-white">
+              ⚠️ {proctor.warningMessage}
+            </div>
+          )}
         </div>
 
         <div className="mx-auto flex max-w-5xl gap-6 px-4 py-6">
@@ -459,6 +525,51 @@ export function ExamPage({ exam, token, onBack, onFinish }) {
               返回考试中心
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (showForceSubmitModal) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-2xl">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+            <svg
+              className="h-8 w-8 text-red-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-slate-800">考试已被强制交卷</h2>
+          <p className="mt-2 text-slate-500">
+            由于违规次数超过阈值，您的考试已被系统强制提交。
+          </p>
+          <div className="my-6 rounded-xl bg-red-50 p-4">
+            <p className="text-sm text-red-600">
+              违规得分：{proctor.status.violationScore} / {proctor.status.forceThreshold}
+            </p>
+            <p className="mt-1 text-xs text-red-500">
+              如有异议，请联系监考老师。
+            </p>
+          </div>
+          <button
+            className="btn btn-primary w-full"
+            onClick={() => {
+              setShowForceSubmitModal(false);
+              onFinish?.();
+            }}
+          >
+            返回考试中心
+          </button>
         </div>
       </div>
     );

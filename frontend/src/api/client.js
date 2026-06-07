@@ -301,3 +301,50 @@ export async function updateQuestionWithNote(questionId, data, token) {
     body: data,
   });
 }
+
+export async function reportProctorEvents(examId, events, token) {
+  return apiRequest('/student/proctor/report', {
+    method: 'POST',
+    token,
+    body: { examId, events },
+  });
+}
+
+export async function getProctorStudentStatus(examId, token) {
+  return apiRequest(`/student/proctor/exams/${examId}/status`, { token });
+}
+
+export async function getProctorExamStats(examId, token) {
+  return apiRequest(`/teacher/proctor/exams/${examId}/stats`, { token });
+}
+
+export async function getProctorStudentEvents(examId, studentId, token, params = {}) {
+  const query = new URLSearchParams();
+  if (params.page) query.set('page', params.page);
+  if (params.pageSize) query.set('pageSize', params.pageSize);
+  return apiRequest(`/teacher/proctor/exams/${examId}/students/${studentId}/events?${query.toString()}`, { token });
+}
+
+export async function getProctorConfig(token) {
+  return apiRequest('/teacher/proctor/config', { token });
+}
+
+export async function saveProctorConfig(data, token) {
+  return apiRequest('/teacher/proctor/config', {
+    method: 'PUT',
+    token,
+    body: data,
+  });
+}
+
+export async function getProctorExamConfig(examId, token) {
+  return apiRequest(`/teacher/proctor/exams/${examId}/config`, { token });
+}
+
+export async function saveProctorExamConfig(examId, data, token) {
+  return apiRequest(`/teacher/proctor/exams/${examId}/config`, {
+    method: 'PUT',
+    token,
+    body: data,
+  });
+}

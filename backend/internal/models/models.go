@@ -355,3 +355,102 @@ type QuestionOptionSnap struct {
 	Content   string `json:"content"`
 	IsCorrect bool   `json:"isCorrect"`
 }
+
+const (
+	ProctorEventTypeTabSwitch      = "tab_switch"
+	ProctorEventTypeBlur           = "blur"
+	ProctorEventTypeCopy           = "copy"
+	ProctorEventTypePaste          = "paste"
+	ProctorEventTypeFullscreenExit = "fullscreen_exit"
+	ProctorEventTypeReconnect      = "reconnect"
+)
+
+const (
+	ProctorSeverityLow    = "low"
+	ProctorSeverityMedium = "medium"
+	ProctorSeverityHigh   = "high"
+)
+
+const (
+	ProctorStatusNormal  = "normal"
+	ProctorStatusWarning = "warning"
+	ProctorStatusSuspicious = "suspicious"
+	ProctorStatusForceSubmitted = "force_submitted"
+)
+
+var ProctorEventSeverityMap = map[string]string{
+	ProctorEventTypeTabSwitch:      ProctorSeverityMedium,
+	ProctorEventTypeBlur:           ProctorSeverityLow,
+	ProctorEventTypeCopy:           ProctorSeverityHigh,
+	ProctorEventTypePaste:          ProctorSeverityHigh,
+	ProctorEventTypeFullscreenExit: ProctorSeverityMedium,
+	ProctorEventTypeReconnect:      ProctorSeverityLow,
+}
+
+var ProctorEventLabelMap = map[string]string{
+	ProctorEventTypeTabSwitch:      "切屏",
+	ProctorEventTypeBlur:           "失焦",
+	ProctorEventTypeCopy:           "复制",
+	ProctorEventTypePaste:          "粘贴",
+	ProctorEventTypeFullscreenExit: "全屏退出",
+	ProctorEventTypeReconnect:      "断线重连",
+}
+
+type ProctorEvent struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	ExamID      uint      `gorm:"index;not null" json:"examId"`
+	Exam        *Exam     `gorm:"foreignKey:ExamID" json:"exam,omitempty"`
+	StudentID   uint      `gorm:"index;not null" json:"studentId"`
+	Student     *User     `gorm:"foreignKey:StudentID" json:"student,omitempty"`
+	EventType   string    `gorm:"size:32;not null;index" json:"eventType"`
+	Severity    string    `gorm:"size:16;not null;index" json:"severity"`
+	EventTime   time.Time `gorm:"not null;index" json:"eventTime"`
+	ExtraInfo   string    `gorm:"type:text" json:"extraInfo"`
+	ClientIP    string    `gorm:"size:64" json:"clientIp"`
+	UserAgent   string    `gorm:"size:512" json:"userAgent"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+func (ProctorEvent) TableName() string {
+	return "proctor_events"
+}
+
+type ProctorConfig struct {
+	ID              uint   `gorm:"primaryKey" json:"id"`
+	ExamID          *uint  `gorm:"uniqueIndex;index" json:"examId"`
+	IsGlobal        bool   `gorm:"not null;default:false;index" json:"isGlobal"`
+	WarningThreshold int   `gorm:"not null;default:3" json:"warningThreshold"`
+	ForceSubmitThreshold int `gorm:"not null;default:5" json:"forceSubmitThreshold"`
+	TabSwitchWeight   int  `gorm:"not null;default:1" json:"tabSwitchWeight"`
+	BlurWeight        int  `gorm:"not null;default:1" json:"blurWeight"`
+	CopyWeight        int  `gorm:"not null;default:2" json:"copyWeight"`
+	PasteWeight       int  `gorm:"not null;default:2" json:"pasteWeight"`
+	FullscreenExitWeight int `gorm:"not null;default:1" json:"fullscreenExitWeight"`
+	ReconnectWeight   int  `gorm:"not null;default:1" json:"reconnectWeight"`
+	AutoForceSubmit   bool  `gorm:"not null;default:false" json:"autoForceSubmit"`
+	AutoMarkSuspicious bool `gorm:"not null;default:true" json:"autoMarkSuspicious"`
+	Enabled           bool  `gorm:"not null;default:true" json:"enabled"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
+}
+
+func (ProctorConfig) TableName() string {
+	return "proctor_configs"
+}
+
+func DefaultProctorConfig() ProctorConfig {
+	return ProctorConfig{
+		IsGlobal:            true,
+		WarningThreshold:    3,
+		ForceSubmitThreshold: 5,
+		TabSwitchWeight:     1,
+		BlurWeight:          1,
+		CopyWeight:          2,
+		PasteWeight:         2,
+		FullscreenExitWeight: 1,
+		ReconnectWeight:     1,
+		AutoForceSubmit:     false,
+		AutoMarkSuspicious:  true,
+		Enabled:             true,
+	}
+}

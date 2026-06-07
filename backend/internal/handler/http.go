@@ -29,6 +29,7 @@ type HTTPHandler struct {
 	checkinSvc         *service.CheckinService
 	pkSvc              *service.PkService
 	exportSvc          *service.ExportService
+	proctorSvc         *service.ProctorService
 	tokens             *auth.TokenManager
 	log                *slog.Logger
 	wsUpgrader         *websocket.Upgrader
@@ -45,6 +46,7 @@ func New(
 	checkinSvc *service.CheckinService,
 	pkSvc *service.PkService,
 	exportSvc *service.ExportService,
+	proctorSvc *service.ProctorService,
 	tokens *auth.TokenManager,
 	log *slog.Logger,
 ) *HTTPHandler {
@@ -66,6 +68,7 @@ func New(
 		checkinSvc:         checkinSvc,
 		pkSvc:              pkSvc,
 		exportSvc:          exportSvc,
+		proctorSvc:         proctorSvc,
 		tokens:             tokens,
 		log:                log,
 		wsUpgrader:         upgrader,
@@ -131,6 +134,13 @@ func (h *HTTPHandler) Router() *gin.Engine {
 				teacher.GET("/exports", h.listExports)
 				teacher.GET("/exports/:id", h.getExportTask)
 				teacher.GET("/exports/:id/download", h.downloadExport)
+
+				teacher.GET("/proctor/exams/:id/stats", h.getProctorExamStats)
+				teacher.GET("/proctor/exams/:id/students/:studentId/events", h.getProctorStudentEvents)
+				teacher.GET("/proctor/config", h.getProctorConfig)
+				teacher.PUT("/proctor/config", h.saveProctorConfig)
+				teacher.GET("/proctor/exams/:id/config", h.getProctorExamConfig)
+				teacher.PUT("/proctor/exams/:id/config", h.saveProctorExamConfig)
 			}
 
 			student := authed.Group("/student", middleware.RequireRole(models.RoleStudent))
@@ -167,6 +177,9 @@ func (h *HTTPHandler) Router() *gin.Engine {
 				student.POST("/pk/rooms/join", h.joinPkRoom)
 				student.GET("/pk/rooms/:code", h.getPkRoom)
 				student.GET("/pk/rooms/:id/results", h.getPkRoundResults)
+
+				student.POST("/proctor/report", h.reportProctorEvents)
+				student.GET("/proctor/exams/:id/status", h.getProctorStudentStatus)
 			}
 
 			teacher := authed.Group("/teacher", middleware.RequireRole(models.RoleTeacher))
@@ -707,6 +720,16 @@ func (h *HTTPHandler) respondServiceError(c *gin.Context, err error) {
 		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
 	case errors.Is(err, service.ErrVersionMismatch):
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrProctorDisabled):
+		c.JSON(http.StatusForbidden, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrProctorRateLimit):
+		c.JSON(http.StatusTooManyRequests, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrProctorInvalidEvent):
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrProctorConfigNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrProctorAlreadySubmitted):
+		c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
 	default:
 		h.log.Error("service error", "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
@@ -1373,4 +1396,155 @@ func (h *HTTPHandler) diffQuestionVersions(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, diff)
+}
+
+func (h *HTTPHandler) reportProctorEvents(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+
+	var req dto.ProctorReportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid payload"})
+		return
+	}
+
+	clientIP := c.ClientIP()
+	userAgent := c.GetHeader("User-Agent")
+
+	result, err := h.proctorSvc.ReportEvents(claims.UserID, req, clientIP, userAgent)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *HTTPHandler) getProctorStudentStatus(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+
+	examID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid exam id"})
+		return
+	}
+
+	status, err := h.proctorSvc.GetStudentStatus(uint(examID), claims.UserID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, status)
+}
+
+func (h *HTTPHandler) getProctorExamStats(c *gin.Context) {
+	examID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid exam id"})
+		return
+	}
+
+	stats, err := h.proctorSvc.GetExamStats(uint(examID))
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, stats)
+}
+
+func (h *HTTPHandler) getProctorStudentEvents(c *gin.Context) {
+	examID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid exam id"})
+		return
+	}
+
+	studentID, err := strconv.ParseUint(c.Param("studentId"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid student id"})
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+
+	events, total, err := h.proctorSvc.GetStudentEvents(uint(examID), uint(studentID), page, pageSize)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"items": events, "total": total, "page": page, "pageSize": pageSize})
+}
+
+func (h *HTTPHandler) getProctorConfig(c *gin.Context) {
+	config, err := h.proctorSvc.GetConfig(nil)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, config)
+}
+
+func (h *HTTPHandler) saveProctorConfig(c *gin.Context) {
+	var req dto.ProctorConfigInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid payload"})
+		return
+	}
+
+	config, err := h.proctorSvc.SaveConfig(nil, req)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, config)
+}
+
+func (h *HTTPHandler) getProctorExamConfig(c *gin.Context) {
+	examID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid exam id"})
+		return
+	}
+
+	config, err := h.proctorSvc.GetConfig(&[]uint{uint(examID)}[0])
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, config)
+}
+
+func (h *HTTPHandler) saveProctorExamConfig(c *gin.Context) {
+	examID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid exam id"})
+		return
+	}
+
+	var req dto.ProctorConfigInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid payload"})
+		return
+	}
+
+	config, err := h.proctorSvc.SaveConfig(&[]uint{uint(examID)}[0], req)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, config)
 }

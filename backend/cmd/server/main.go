@@ -42,13 +42,19 @@ func main() {
 	checkinSvc := service.NewCheckinService(db, log)
 	pkSvc := service.NewPkService(db, log)
 	exportSvc := service.NewExportService(db, log)
+	proctorSvc := service.NewProctorService(db, log)
 
 	if err := checkinSvc.InitBadges(); err != nil {
 		log.Error("init badges failed", "error", err.Error())
 		return
 	}
 
-	h := handler.New(authSvc, questionSvc, questionVersionSvc, attemptSvc, subjectiveSvc, examSvc, discussionSvc, checkinSvc, pkSvc, exportSvc, tokens, log)
+	if err := proctorSvc.InitDefaultConfig(); err != nil {
+		log.Error("init proctor config failed", "error", err.Error())
+		return
+	}
+
+	h := handler.New(authSvc, questionSvc, questionVersionSvc, attemptSvc, subjectiveSvc, examSvc, discussionSvc, checkinSvc, pkSvc, exportSvc, proctorSvc, tokens, log)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           h.Router(),

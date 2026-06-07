@@ -6,7 +6,7 @@ import { QuestionEditorModal } from '../components/QuestionEditorModal';
 import { StatCard } from '../components/StatCard';
 import { questionSchema } from '../utils/validators';
 
-export function TeacherDashboard({ user, token, onLogout, onNavigateToSubjective, onNavigateToGrading, onNavigateToExam, onNavigateToReport }) {
+export function TeacherDashboard({ user, token, onLogout, onNavigateToSubjective, onNavigateToGrading, onNavigateToExam, onNavigateToReport, onNavigateToProctor }) {
   const [overview, setOverview] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [stats, setStats] = useState([]);
@@ -148,6 +148,9 @@ export function TeacherDashboard({ user, token, onLogout, onNavigateToSubjective
           </button>
           <button className="btn btn-outline btn-success" onClick={onNavigateToReport}>
             成绩报表
+          </button>
+          <button className="btn btn-outline btn-error" onClick={onNavigateToProctor}>
+            🛡️ 防作弊监控
           </button>
           <button className="btn btn-neutral" onClick={onLogout}>
             退出登录

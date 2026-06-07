@@ -303,3 +303,77 @@ type StudentScoreItem struct {
 	Rate        string `json:"rate"`
 	CreatedAt   string `json:"createdAt"`
 }
+
+type ProctorEventItem struct {
+	EventType string `json:"eventType" binding:"required,oneof=tab_switch blur copy paste fullscreen_exit reconnect"`
+	EventTime int64  `json:"eventTime" binding:"required"`
+	ExtraInfo string `json:"extraInfo"`
+}
+
+type ProctorReportRequest struct {
+	ExamID  uint              `json:"examId" binding:"required"`
+	Events  []ProctorEventItem `json:"events" binding:"required,min=1,max=50,dive"`
+}
+
+type ProctorReportResponse struct {
+	ReportedCount    int    `json:"reportedCount"`
+	ViolationScore   int    `json:"violationScore"`
+	WarningThreshold int    `json:"warningThreshold"`
+	ForceThreshold   int    `json:"forceThreshold"`
+	Status           string `json:"status"`
+	RemainingWarns   int    `json:"remainingWarns"`
+}
+
+type ProctorStudentStat struct {
+	StudentID      uint            `json:"studentId"`
+	StudentName    string          `json:"studentName"`
+	TotalEvents    int             `json:"totalEvents"`
+	ViolationScore int             `json:"violationScore"`
+	EventBreakdown map[string]int  `json:"eventBreakdown"`
+	Status         string          `json:"status"`
+	LastEventTime  string          `json:"lastEventTime"`
+}
+
+type ProctorExamStatsResponse struct {
+	ExamID      uint                 `json:"examId"`
+	ExamName    string               `json:"examName"`
+	TotalStudents int                 `json:"totalStudents"`
+	TotalEvents  int                 `json:"totalEvents"`
+	SuspiciousCount int              `json:"suspiciousCount"`
+	WarningCount  int                 `json:"warningCount"`
+	StudentStats []ProctorStudentStat `json:"studentStats"`
+}
+
+type ProctorConfigInput struct {
+	WarningThreshold     int  `json:"warningThreshold" binding:"min=1"`
+	ForceSubmitThreshold int  `json:"forceSubmitThreshold" binding:"min=1"`
+	TabSwitchWeight      int  `json:"tabSwitchWeight" binding:"min=0"`
+	BlurWeight           int  `json:"blurWeight" binding:"min=0"`
+	CopyWeight           int  `json:"copyWeight" binding:"min=0"`
+	PasteWeight          int  `json:"pasteWeight" binding:"min=0"`
+	FullscreenExitWeight int  `json:"fullscreenExitWeight" binding:"min=0"`
+	ReconnectWeight      int  `json:"reconnectWeight" binding:"min=0"`
+	AutoForceSubmit      bool `json:"autoForceSubmit"`
+	AutoMarkSuspicious   bool `json:"autoMarkSuspicious"`
+	Enabled              bool `json:"enabled"`
+}
+
+type ProctorStudentStatusResponse struct {
+	ExamID           uint           `json:"examId"`
+	StudentID        uint           `json:"studentId"`
+	TotalEvents      int            `json:"totalEvents"`
+	ViolationScore   int            `json:"violationScore"`
+	WarningThreshold int            `json:"warningThreshold"`
+	ForceThreshold   int            `json:"forceThreshold"`
+	Status           string         `json:"status"`
+	RemainingWarns   int            `json:"remainingWarns"`
+	EventBreakdown   map[string]int `json:"eventBreakdown"`
+	RecentEvents     []ProctorEventBrief `json:"recentEvents"`
+}
+
+type ProctorEventBrief struct {
+	ID        uint   `json:"id"`
+	EventType string `json:"eventType"`
+	EventTime string `json:"eventTime"`
+	Severity  string `json:"severity"`
+}
