@@ -108,3 +108,63 @@ type ReplyFilter struct {
 	Page     int  `form:"page,default=1"`
 	PageSize int  `form:"pageSize,default=5"`
 }
+
+type CheckinCalendarRequest struct {
+	Year  int `form:"year" binding:"required"`
+	Month int `form:"month" binding:"required,min=1,max=12"`
+}
+
+type CheckinCalendarDay struct {
+	Date         string  `json:"date"`
+	IsCheckedIn  bool    `json:"isCheckedIn"`
+	QuestionCount int    `json:"questionCount"`
+	AccuracyRate float64 `json:"accuracyRate"`
+}
+
+type CheckinCalendarResponse struct {
+	Year     int                   `json:"year"`
+	Month    int                   `json:"month"`
+	Days     []CheckinCalendarDay  `json:"days"`
+}
+
+type CheckinStatusResponse struct {
+	TodayCheckedIn bool   `json:"todayCheckedIn"`
+	CurrentStreak  int    `json:"currentStreak"`
+	LongestStreak  int    `json:"longestStreak"`
+	TodayDate      string `json:"todayDate"`
+	QuestionCount  int    `json:"questionCount"`
+	CorrectCount   int    `json:"correctCount"`
+}
+
+type ManualCheckinRequest struct {
+	QuestionCount int `json:"questionCount" binding:"required,min=1"`
+	CorrectCount  int `json:"correctCount" binding:"required,min=0"`
+}
+
+type CheckinAwardBadge struct {
+	BadgeID     uint   `json:"badgeId"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Icon        string `json:"icon"`
+}
+
+type CheckinResult struct {
+	CheckedIn       bool                  `json:"checkedIn"`
+	IsNewCheckin    bool                  `json:"isNewCheckin"`
+	CurrentStreak   int                   `json:"currentStreak"`
+	NewlyAwarded    []CheckinAwardBadge   `json:"newlyAwarded"`
+	QuestionCount   int                   `json:"questionCount"`
+	CorrectCount    int                   `json:"correctCount"`
+	AccuracyRate    float64               `json:"accuracyRate"`
+}
+
+type UserBadgeResponse struct {
+	BadgeID     uint   `json:"badgeId"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Icon        string `json:"icon"`
+	Type        string `json:"type"`
+	Condition   int    `json:"condition"`
+	AwardedAt   string `json:"awardedAt"`
+	Owned       bool   `json:"owned"`
+}

@@ -174,3 +174,19 @@ export async function deleteDiscussion(id, token, role = 'student') {
   const prefix = role === 'teacher' ? '/teacher' : '/student';
   return apiRequest(`${prefix}/discussions/${id}`, { method: 'DELETE', token });
 }
+
+export async function getCheckinStatus(token) {
+  return apiRequest('/student/checkin/status', { token });
+}
+
+export async function manualCheckin(data, token) {
+  return apiRequest('/student/checkin', { method: 'POST', token, body: data });
+}
+
+export async function getCheckinCalendar(year, month, token) {
+  return apiRequest(`/student/checkin/calendar?year=${year}&month=${month}`, { token });
+}
+
+export async function getUserBadges(token) {
+  return apiRequest('/student/checkin/badges', { token });
+}

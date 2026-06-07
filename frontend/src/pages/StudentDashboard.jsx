@@ -3,6 +3,11 @@ import { toast } from 'react-hot-toast';
 
 import { apiRequest } from '../api/client';
 import { StatCard } from '../components/StatCard';
+import { CheckinCard } from '../components/CheckinCard';
+import { CheckinCalendar } from '../components/CheckinCalendar';
+import { BadgeWall } from '../components/BadgeWall';
+import { CelebrationModal } from '../components/CelebrationModal';
+import { getCheckinStatus } from '../api/client';
 
 export function StudentDashboard({ user, token, onLogout, onNavigateToSubjective, onNavigateToMySubjective, onNavigateToExam }) {
   const [loading, setLoading] = useState(true);
@@ -13,6 +18,9 @@ export function StudentDashboard({ user, token, onLogout, onNavigateToSubjective
   const [submitting, setSubmitting] = useState(false);
   const [loadingQuiz, setLoadingQuiz] = useState(false);
   const [lastResult, setLastResult] = useState(null);
+  const [checkinStatus, setCheckinStatus] = useState(null);
+  const [celebrationBadges, setCelebrationBadges] = useState([]);
+  const [badgeRefreshTrigger, setBadgeRefreshTrigger] = useState(0);
 
   const className = user.classRoom?.name || '未分班';
 
@@ -31,12 +39,14 @@ export function StudentDashboard({ user, token, onLogout, onNavigateToSubjective
   const loadStudentData = async () => {
     setLoading(true);
     try {
-      const [mistakeData, attemptData] = await Promise.all([
+      const [mistakeData, attemptData, checkinData] = await Promise.all([
         apiRequest('/student/mistakes', { token }),
         apiRequest('/student/attempts', { token }),
+        getCheckinStatus(token),
       ]);
       setMistakes(mistakeData);
       setAttempts(attemptData);
+      setCheckinStatus(checkinData);
     } catch (error) {
       toast.error(error.message || '加载学生数据失败');
     } finally {
@@ -92,6 +102,15 @@ export function StudentDashboard({ user, token, onLogout, onNavigateToSubjective
       });
       setLastResult(result);
       toast.success(`提交成功：${result.score}/${result.total}`);
+
+      const newCheckinStatus = await getCheckinStatus(token);
+      setCheckinStatus(newCheckinStatus);
+
+      if (result.newlyAwarded && result.newlyAwarded.length > 0) {
+        setCelebrationBadges(result.newlyAwarded);
+        setBadgeRefreshTrigger((t) => t + 1);
+      }
+
       await loadStudentData();
     } catch (error) {
       toast.error(error.message || '提交失败');
@@ -100,8 +119,31 @@ export function StudentDashboard({ user, token, onLogout, onNavigateToSubjective
     }
   };
 
+  const handleCheckinSuccess = (result) => {
+    setCheckinStatus((prev) => ({
+      ...prev,
+      todayCheckedIn: true,
+      currentStreak: result.currentStreak,
+      questionCount: result.questionCount,
+      correctCount: result.correctCount,
+    }));
+
+    if (result.newlyAwarded && result.newlyAwarded.length > 0) {
+      setCelebrationBadges(result.newlyAwarded);
+      setBadgeRefreshTrigger((t) => t + 1);
+    }
+  };
+
+  const handleCloseCelebration = () => {
+    setCelebrationBadges([]);
+  };
+
   return (
     <div className="min-h-screen bg-board px-4 py-6 md:px-8 md:py-8">
+      <CelebrationModal
+        badges={celebrationBadges}
+        onClose={handleCloseCelebration}
+      />
       <header className="mx-auto mb-6 flex max-w-7xl flex-col gap-3 rounded-3xl border border-white/70 bg-white/90 px-6 py-5 shadow-card md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.25em] text-emerald-700">Student Console</p>
@@ -200,6 +242,19 @@ export function StudentDashboard({ user, token, onLogout, onNavigateToSubjective
           </section>
 
           <section className="space-y-5">
+            <CheckinCard
+              status={checkinStatus}
+              onCheckinSuccess={handleCheckinSuccess}
+              token={token}
+            />
+
+            <CheckinCalendar token={token} />
+
+            <BadgeWall
+              token={token}
+              refreshTrigger={badgeRefreshTrigger}
+            />
+
             <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
               <h2 className="mb-3 text-lg font-semibold text-slate-800">错题本（易错题）</h2>
               <div className="max-h-[260px] overflow-auto rounded-xl border border-slate-200">

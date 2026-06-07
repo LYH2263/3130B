@@ -23,6 +23,7 @@ type HTTPHandler struct {
 	subjectiveSvc *service.SubjectiveService
 	examSvc       *service.ExamService
 	discussionSvc *service.DiscussionService
+	checkinSvc    *service.CheckinService
 	tokens        *auth.TokenManager
 	log           *slog.Logger
 }
@@ -34,6 +35,7 @@ func New(
 	subjectiveSvc *service.SubjectiveService,
 	examSvc *service.ExamService,
 	discussionSvc *service.DiscussionService,
+	checkinSvc *service.CheckinService,
 	tokens *auth.TokenManager,
 	log *slog.Logger,
 ) *HTTPHandler {
@@ -44,6 +46,7 @@ func New(
 		subjectiveSvc: subjectiveSvc,
 		examSvc:       examSvc,
 		discussionSvc: discussionSvc,
+		checkinSvc:    checkinSvc,
 		tokens:        tokens,
 		log:           log,
 	}
@@ -124,6 +127,11 @@ func (h *HTTPHandler) Router() *gin.Engine {
 				student.POST("/discussions", h.createDiscussion)
 				student.POST("/discussions/:id/like", h.toggleLike)
 				student.DELETE("/discussions/:id", h.deleteDiscussion)
+
+				student.GET("/checkin/status", h.getCheckinStatus)
+				student.POST("/checkin", h.manualCheckin)
+				student.GET("/checkin/calendar", h.getCheckinCalendar)
+				student.GET("/checkin/badges", h.getUserBadges)
 			}
 
 			teacher := authed.Group("/teacher", middleware.RequireRole(models.RoleTeacher))
@@ -338,7 +346,27 @@ func (h *HTTPHandler) submit(c *gin.Context) {
 		h.respondServiceError(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, result)
+
+	checkinResult, checkinErr := h.checkinSvc.AutoCheckin(claims.UserID, result.Total, result.Score)
+	if checkinErr != nil {
+		h.log.Warn("auto checkin failed", "error", checkinErr.Error(), "userID", claims.UserID)
+	}
+
+	response := gin.H{
+		"attemptId": result.AttemptID,
+		"score":     result.Score,
+		"total":     result.Total,
+		"rate":      result.Rate,
+	}
+
+	if checkinResult != nil && checkinResult.CheckedIn {
+		response["checkin"] = checkinResult
+		if len(checkinResult.NewlyAwarded) > 0 {
+			response["newlyAwarded"] = checkinResult.NewlyAwarded
+		}
+	}
+
+	c.JSON(http.StatusCreated, response)
 }
 
 func (h *HTTPHandler) studentMistakes(c *gin.Context) {
@@ -954,4 +982,70 @@ func (h *HTTPHandler) deleteDiscussion(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "discussion deleted"})
+}
+
+func (h *HTTPHandler) getCheckinStatus(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	status, err := h.checkinSvc.GetCheckinStatus(claims.UserID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, status)
+}
+
+func (h *HTTPHandler) manualCheckin(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	var req dto.ManualCheckinRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid checkin payload"})
+		return
+	}
+	result, err := h.checkinSvc.ManualCheckin(claims.UserID, req)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *HTTPHandler) getCheckinCalendar(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	var req dto.CheckinCalendarRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid calendar query"})
+		return
+	}
+	calendar, err := h.checkinSvc.GetCalendar(claims.UserID, req.Year, req.Month)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, calendar)
+}
+
+func (h *HTTPHandler) getUserBadges(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	badges, err := h.checkinSvc.GetUserBadges(claims.UserID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, badges)
 }

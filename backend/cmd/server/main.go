@@ -38,8 +38,14 @@ func main() {
 	subjectiveSvc := service.NewSubjectiveService(db, log)
 	examSvc := service.NewExamService(db, log)
 	discussionSvc := service.NewDiscussionService(db, log)
+	checkinSvc := service.NewCheckinService(db, log)
 
-	h := handler.New(authSvc, questionSvc, attemptSvc, subjectiveSvc, examSvc, discussionSvc, tokens, log)
+	if err := checkinSvc.InitBadges(); err != nil {
+		log.Error("init badges failed", "error", err.Error())
+		return
+	}
+
+	h := handler.New(authSvc, questionSvc, attemptSvc, subjectiveSvc, examSvc, discussionSvc, checkinSvc, tokens, log)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           h.Router(),

@@ -180,3 +180,62 @@ type DiscussionLike struct {
 func (DiscussionLike) TableName() string {
 	return "discussion_likes"
 }
+
+type Checkin struct {
+	ID             uint      `gorm:"primaryKey" json:"id"`
+	UserID         uint      `gorm:"uniqueIndex:idx_user_date;not null;index" json:"userId"`
+	User           *User     `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	CheckinDate    string    `gorm:"size:10;uniqueIndex:idx_user_date;not null;index" json:"checkinDate"`
+	QuestionCount  int       `gorm:"not null;default:0" json:"questionCount"`
+	CorrectCount   int       `gorm:"not null;default:0" json:"correctCount"`
+	AccuracyRate   float64   `gorm:"type:decimal(5,2);not null;default:0" json:"accuracyRate"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+}
+
+type Streak struct {
+	UserID          uint      `gorm:"primaryKey" json:"userId"`
+	User            *User     `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	CurrentStreak   int       `gorm:"not null;default:0;index" json:"currentStreak"`
+	LongestStreak   int       `gorm:"not null;default:0" json:"longestStreak"`
+	LastCheckinDate string    `gorm:"size:10;index" json:"lastCheckinDate"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+}
+
+type Badge struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	Name        string    `gorm:"size:64;not null" json:"name"`
+	Description string    `gorm:"size:255;not null" json:"description"`
+	Icon        string    `gorm:"size:32;not null;default:🏆" json:"icon"`
+	Type        string    `gorm:"size:16;not null;default:streak;index" json:"type"`
+	Condition   int       `gorm:"not null;default:0" json:"condition"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+type UserBadge struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	UserID    uint      `gorm:"uniqueIndex:idx_user_badge;not null;index" json:"userId"`
+	BadgeID   uint      `gorm:"uniqueIndex:idx_user_badge;not null;index" json:"badgeId"`
+	Badge     *Badge    `gorm:"foreignKey:BadgeID" json:"badge,omitempty"`
+	AwardedAt time.Time `json:"awardedAt"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+func (UserBadge) TableName() string {
+	return "user_badges"
+}
+
+const (
+	BadgeTypeStreak = "streak"
+)
+
+var MilestoneBadges = []Badge{
+	{Name: "连续打卡7天", Description: "连续打卡满7天", Icon: "🔥", Type: BadgeTypeStreak, Condition: 7},
+	{Name: "连续打卡14天", Description: "连续打卡满14天", Icon: "⚡", Type: BadgeTypeStreak, Condition: 14},
+	{Name: "连续打卡21天", Description: "连续打卡满21天", Icon: "🌟", Type: BadgeTypeStreak, Condition: 21},
+	{Name: "连续打卡30天", Description: "连续打卡满30天", Icon: "👑", Type: BadgeTypeStreak, Condition: 30},
+	{Name: "连续打卡60天", Description: "连续打卡满60天", Icon: "💎", Type: BadgeTypeStreak, Condition: 60},
+	{Name: "连续打卡100天", Description: "连续打卡满100天", Icon: "🏆", Type: BadgeTypeStreak, Condition: 100},
+}
