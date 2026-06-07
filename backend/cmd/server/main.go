@@ -35,6 +35,7 @@ func main() {
 	authSvc := service.NewAuthService(db, tokens, log)
 	questionSvc := service.NewQuestionService(db, log)
 	questionVersionSvc := service.NewQuestionVersionService(db, log)
+	questionStatsSvc := service.NewQuestionStatsService(db, log)
 	attemptSvc := service.NewAttemptService(db, log)
 	subjectiveSvc := service.NewSubjectiveService(db, log)
 	examSvc := service.NewExamService(db, log)
@@ -55,7 +56,7 @@ func main() {
 		return
 	}
 
-	h := handler.New(authSvc, questionSvc, questionVersionSvc, attemptSvc, subjectiveSvc, examSvc, discussionSvc, checkinSvc, pkSvc, exportSvc, proctorSvc, paperSvc, tokens, log)
+	h := handler.New(authSvc, questionSvc, questionVersionSvc, questionStatsSvc, attemptSvc, subjectiveSvc, examSvc, discussionSvc, checkinSvc, pkSvc, exportSvc, proctorSvc, paperSvc, tokens, log)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           h.Router(),

@@ -59,6 +59,7 @@ func autoMigrate(db *gorm.DB) error {
 		&models.QuestionVersion{},
 		&models.ProctorEvent{},
 		&models.ProctorConfig{},
+		&models.QuestionStats{},
 	); err != nil {
 		return fmt.Errorf("auto migrate: %w", err)
 	}

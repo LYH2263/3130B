@@ -4,7 +4,15 @@ import { toast } from 'react-hot-toast';
 import { apiRequest } from '../api/client';
 import { QuestionEditorModal } from '../components/QuestionEditorModal';
 import { StatCard } from '../components/StatCard';
+import { DifficultyDistributionChart } from '../components/DifficultyDistributionChart';
 import { questionSchema } from '../utils/validators';
+import {
+  getDifficultyLevel,
+  getDifficultyLabel,
+  getDifficultyBadgeClass,
+  formatDifficultyValue,
+  getAbnormalTypes,
+} from '../utils/difficultyUtils';
 
 export function TeacherDashboard({ user, token, onLogout, onNavigateToSubjective, onNavigateToGrading, onNavigateToExam, onNavigateToReport, onNavigateToProctor, onNavigateToPaper }) {
   const [overview, setOverview] = useState(null);
@@ -17,21 +25,32 @@ export function TeacherDashboard({ user, token, onLogout, onNavigateToSubjective
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [uploading, setUploading] = useState(false);
 
+  const [difficultyDistribution, setDifficultyDistribution] = useState(null);
+  const [abnormalQuestions, setAbnormalQuestions] = useState([]);
+  const [recalculating, setRecalculating] = useState(false);
+  const [difficultyFilter, setDifficultyFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('default');
+  const [activeTab, setActiveTab] = useState('all');
+
   const topStats = useMemo(() => stats.slice(0, 12), [stats]);
 
   const loadDashboard = async () => {
     setLoading(true);
     try {
-      const [overviewData, questionData, statData, attemptData] = await Promise.all([
+      const [overviewData, questionData, statData, attemptData, distData, abnormalData] = await Promise.all([
         apiRequest('/teacher/overview', { token }),
-        apiRequest('/teacher/questions', { token }),
+        apiRequest('/teacher/question-stats/questions?pageSize=100', { token }),
         apiRequest('/teacher/class-stats', { token }),
         apiRequest('/teacher/attempts?limit=50', { token }),
+        apiRequest('/teacher/question-stats/distribution', { token }),
+        apiRequest('/teacher/question-stats/abnormal', { token }),
       ]);
       setOverview(overviewData);
-      setQuestions(questionData);
+      setQuestions(questionData.items || []);
       setStats(statData);
       setAttempts(attemptData);
+      setDifficultyDistribution(distData);
+      setAbnormalQuestions(abnormalData.items || []);
     } catch (error) {
       toast.error(error.message || '加载教师看板失败');
     } finally {
@@ -115,6 +134,25 @@ export function TeacherDashboard({ user, token, onLogout, onNavigateToSubjective
     }
   };
 
+  const handleRecalculate = async () => {
+    if (!window.confirm('确认重新计算所有题目的难度系数？这可能需要一些时间。')) {
+      return;
+    }
+    try {
+      setRecalculating(true);
+      const result = await apiRequest('/teacher/question-stats/recalculate', {
+        method: 'POST',
+        token,
+      });
+      toast.success(`重算完成，更新 ${result.updatedCount} 题，失败 ${result.failedCount} 题`);
+      await loadDashboard();
+    } catch (error) {
+      toast.error(error.message || '重算失败');
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
   const openCreateModal = () => {
     setEditingQuestion(null);
     setModalOpen(true);
@@ -123,6 +161,70 @@ export function TeacherDashboard({ user, token, onLogout, onNavigateToSubjective
   const openEditModal = (question) => {
     setEditingQuestion(question);
     setModalOpen(true);
+  };
+
+  const filteredQuestions = useMemo(() => {
+    let result = [...questions];
+
+    if (activeTab === 'abnormal') {
+      result = result.filter((q) => {
+        if (!q.stats || !q.stats.hasEnoughData) return false;
+        const types = getAbnormalTypes(q.stats);
+        return types.length > 0;
+      });
+    } else if (difficultyFilter !== 'all') {
+      result = result.filter((q) => {
+        const level = getDifficultyLevel(q.stats?.difficulty, q.stats?.hasEnoughData);
+        return level === difficultyFilter;
+      });
+    }
+
+    if (sortBy === 'difficulty_asc') {
+      result.sort((a, b) => {
+        const aHas = a.stats?.hasEnoughData && a.stats?.difficulty != null;
+        const bHas = b.stats?.hasEnoughData && b.stats?.difficulty != null;
+        if (!aHas && !bHas) return 0;
+        if (!aHas) return 1;
+        if (!bHas) return -1;
+        return b.stats.difficulty - a.stats.difficulty;
+      });
+    } else if (sortBy === 'difficulty_desc') {
+      result.sort((a, b) => {
+        const aHas = a.stats?.hasEnoughData && a.stats?.difficulty != null;
+        const bHas = b.stats?.hasEnoughData && b.stats?.difficulty != null;
+        if (!aHas && !bHas) return 0;
+        if (!aHas) return 1;
+        if (!bHas) return -1;
+        return a.stats.difficulty - b.stats.difficulty;
+      });
+    } else if (sortBy === 'attempts_desc') {
+      result.sort((a, b) => (b.stats?.totalAttempts || 0) - (a.stats?.totalAttempts || 0));
+    }
+
+    return result;
+  }, [questions, difficultyFilter, sortBy, activeTab]);
+
+  const renderDifficultyBadge = (question) => {
+    const stats = question.stats;
+    const level = getDifficultyLevel(stats?.difficulty, stats?.hasEnoughData);
+    const label = getDifficultyLabel(level);
+    const badgeClass = getDifficultyBadgeClass(level);
+    const value = formatDifficultyValue(stats?.difficulty, stats?.hasEnoughData);
+
+    return (
+      <span className={`badge badge-sm ${badgeClass} badge-outline`}>
+        {label} {stats?.hasEnoughData ? `(${value})` : ''}
+      </span>
+    );
+  };
+
+  const renderAttemptBadge = (question) => {
+    const count = question.stats?.totalAttempts || 0;
+    return (
+      <span className="badge badge-sm badge-ghost">
+        作答 {count} 次
+      </span>
+    );
   };
 
   return (
@@ -187,10 +289,60 @@ export function TeacherDashboard({ user, token, onLogout, onNavigateToSubjective
                     {uploading ? '上传中...' : '上传 JSON 题库'}
                     <input type="file" className="hidden" accept="application/json" disabled={uploading} onChange={handleUpload} />
                   </label>
+                  <button
+                    className="btn btn-outline btn-info"
+                    onClick={handleRecalculate}
+                    disabled={recalculating}
+                  >
+                    {recalculating ? '重算中...' : '🔄 重算难度'}
+                  </button>
                   <button className="btn btn-primary" onClick={openCreateModal}>
                     新增题目
                   </button>
                 </div>
+              </div>
+
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <div className="tabs tabs-boxed">
+                  <a
+                    className={`tab ${activeTab === 'all' ? 'tab-active' : ''}`}
+                    onClick={() => setActiveTab('all')}
+                  >
+                    全部题目
+                  </a>
+                  <a
+                    className={`tab ${activeTab === 'abnormal' ? 'tab-active' : ''}`}
+                    onClick={() => setActiveTab('abnormal')}
+                  >
+                    异常题目 ({abnormalQuestions.length})
+                  </a>
+                </div>
+
+                <div className="flex-1" />
+
+                <select
+                  className="select select-sm select-bordered"
+                  value={difficultyFilter}
+                  onChange={(e) => setDifficultyFilter(e.target.value)}
+                  disabled={activeTab === 'abnormal'}
+                >
+                  <option value="all">全部难度</option>
+                  <option value="easy">简单</option>
+                  <option value="medium">中等</option>
+                  <option value="hard">困难</option>
+                  <option value="no_data">数据不足</option>
+                </select>
+
+                <select
+                  className="select select-sm select-bordered"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                >
+                  <option value="default">默认排序</option>
+                  <option value="difficulty_asc">难度从易到难</option>
+                  <option value="difficulty_desc">难度从难到易</option>
+                  <option value="attempts_desc">作答量从高到低</option>
+                </select>
               </div>
 
               <div className="max-h-[460px] overflow-auto rounded-xl border border-slate-200">
@@ -199,32 +351,50 @@ export function TeacherDashboard({ user, token, onLogout, onNavigateToSubjective
                     <tr>
                       <th>ID</th>
                       <th>题干</th>
+                      <th>难度</th>
+                      <th>作答量</th>
                       <th>操作</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {questions.map((question) => (
-                      <tr key={question.id}>
-                        <td className="font-mono text-xs">{question.id}</td>
-                        <td className="max-w-sm truncate" title={question.title}>
-                          {question.title}
-                        </td>
-                        <td>
-                          <div className="flex gap-1">
-                            <button className="btn btn-xs btn-ghost" onClick={() => openEditModal(question)}>
-                              编辑
-                            </button>
-                            <button className="btn btn-xs btn-ghost text-error" onClick={() => handleDeleteQuestion(question.id)}>
-                              删除
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {!questions.length ? (
+                    {filteredQuestions.map((question) => {
+                      const abnormalTypes = getAbnormalTypes(question.stats);
+                      const isAbnormal = abnormalTypes.length > 0;
+                      return (
+                        <tr key={question.id} className={isAbnormal ? 'bg-amber-50/50' : ''}>
+                          <td className="font-mono text-xs">{question.id}</td>
+                          <td className="max-w-sm truncate" title={question.title}>
+                            {question.title}
+                            {isAbnormal && (
+                              <div className="mt-1">
+                                <span className="badge badge-xs badge-error badge-outline">
+                                  {abnormalTypes.join('/')}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                          <td>{renderDifficultyBadge(question)}</td>
+                          <td>{renderAttemptBadge(question)}</td>
+                          <td>
+                            <div className="flex gap-1">
+                              <button className="btn btn-xs btn-ghost" onClick={() => openEditModal(question)}>
+                                编辑
+                              </button>
+                              <button
+                                className="btn btn-xs btn-ghost text-error"
+                                onClick={() => handleDeleteQuestion(question.id)}
+                              >
+                                删除
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {!filteredQuestions.length ? (
                       <tr>
-                        <td colSpan={3} className="text-center text-slate-500">
-                          当前没有题目，请先新增或上传题库。
+                        <td colSpan={5} className="text-center text-slate-500">
+                          {activeTab === 'abnormal' ? '暂无异常题目' : '当前没有题目，请先新增或上传题库。'}
                         </td>
                       </tr>
                     ) : null}
@@ -234,8 +404,15 @@ export function TeacherDashboard({ user, token, onLogout, onNavigateToSubjective
             </article>
 
             <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
+              <h2 className="mb-3 text-lg font-semibold text-slate-800">难度分布</h2>
+              <DifficultyDistributionChart distribution={difficultyDistribution} />
+            </article>
+          </section>
+
+          <section className="grid gap-5 lg:grid-cols-2">
+            <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
               <h2 className="mb-3 text-lg font-semibold text-slate-800">最近成绩同步</h2>
-              <div className="max-h-[460px] overflow-auto rounded-xl border border-slate-200">
+              <div className="max-h-[320px] overflow-auto rounded-xl border border-slate-200">
                 <table className="table table-sm">
                   <thead>
                     <tr>
@@ -267,43 +444,43 @@ export function TeacherDashboard({ user, token, onLogout, onNavigateToSubjective
                 </table>
               </div>
             </article>
-          </section>
 
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
-            <h2 className="mb-3 text-lg font-semibold text-slate-800">班级错题热区（自动统计）</h2>
-            <div className="max-h-[320px] overflow-auto rounded-xl border border-slate-200">
-              <table className="table table-sm">
-                <thead>
-                  <tr>
-                    <th>班级</th>
-                    <th>题目ID</th>
-                    <th>题目</th>
-                    <th>错误次数</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topStats.map((item, index) => (
-                    <tr key={`${item.classId}-${item.questionId}-${index}`}>
-                      <td>{item.className || '-'}</td>
-                      <td>{item.questionId}</td>
-                      <td className="max-w-3xl truncate" title={item.question}>
-                        {item.question}
-                      </td>
-                      <td>
-                        <span className="badge badge-warning badge-outline">{item.wrongCount}</span>
-                      </td>
-                    </tr>
-                  ))}
-                  {!topStats.length ? (
+            <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
+              <h2 className="mb-3 text-lg font-semibold text-slate-800">班级错题热区（自动统计）</h2>
+              <div className="max-h-[320px] overflow-auto rounded-xl border border-slate-200">
+                <table className="table table-sm">
+                  <thead>
                     <tr>
-                      <td colSpan={4} className="text-center text-slate-500">
-                        暂无错题统计数据
-                      </td>
+                      <th>班级</th>
+                      <th>题目ID</th>
+                      <th>题目</th>
+                      <th>错误次数</th>
                     </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {topStats.map((item, index) => (
+                      <tr key={`${item.classId}-${item.questionId}-${index}`}>
+                        <td>{item.className || '-'}</td>
+                        <td>{item.questionId}</td>
+                        <td className="max-w-3xl truncate" title={item.question}>
+                          {item.question}
+                        </td>
+                        <td>
+                          <span className="badge badge-warning badge-outline">{item.wrongCount}</span>
+                        </td>
+                      </tr>
+                    ))}
+                    {!topStats.length ? (
+                      <tr>
+                        <td colSpan={4} className="text-center text-slate-500">
+                          暂无错题统计数据
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </article>
           </section>
         </main>
       )}

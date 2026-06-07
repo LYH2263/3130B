@@ -585,3 +585,50 @@ type GapItem struct {
 	Available int   `json:"available"`
 	Gap      int    `json:"gap"`
 }
+
+const (
+	MinSampleSize         = 20
+	HighGroupRatio        = 0.27
+	LowGroupRatio         = 0.27
+	InsufficientDataLabel = "data_insufficient"
+)
+
+const (
+	DifficultyCalcEasyThreshold   = 0.7
+	DifficultyCalcHardThreshold   = 0.3
+	DiscriminationGoodThreshold   = 0.4
+	DiscriminationPoorThreshold   = 0.2
+)
+
+type QuestionStats struct {
+	ID             uint       `gorm:"primaryKey" json:"id"`
+	QuestionID     uint       `gorm:"uniqueIndex;not null;index" json:"questionId"`
+	Question       *Question  `gorm:"foreignKey:QuestionID" json:"question,omitempty"`
+	TotalAttempts  int64      `gorm:"not null;default:0;index" json:"totalAttempts"`
+	CorrectCount   int64      `gorm:"not null;default:0" json:"correctCount"`
+	Difficulty     *float64   `gorm:"type:decimal(5,4);index" json:"difficulty"`
+	Discrimination *float64   `gorm:"type:decimal(5,4);index" json:"discrimination"`
+	HasEnoughData  bool       `gorm:"not null;default:false;index" json:"hasEnoughData"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
+}
+
+func (QuestionStats) TableName() string {
+	return "question_stats"
+}
+
+type DifficultyDistribution struct {
+	EasyCount   int64 `json:"easyCount"`
+	MediumCount int64 `json:"mediumCount"`
+	HardCount   int64 `json:"hardCount"`
+	NoDataCount int64 `json:"noDataCount"`
+	Total       int64 `json:"total"`
+}
+
+type AbnormalQuestion struct {
+	QuestionID     uint    `json:"questionId"`
+	Title          string  `json:"title"`
+	Difficulty     float64 `json:"difficulty"`
+	Discrimination float64 `json:"discrimination"`
+	TotalAttempts  int64   `json:"totalAttempts"`
+	AbnormalType   string  `json:"abnormalType"`
+}

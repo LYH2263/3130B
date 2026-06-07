@@ -22,6 +22,7 @@ type HTTPHandler struct {
 	authSvc            *service.AuthService
 	questionSvc        *service.QuestionService
 	questionVersionSvc *service.QuestionVersionService
+	questionStatsSvc   *service.QuestionStatsService
 	attemptSvc         *service.AttemptService
 	subjectiveSvc      *service.SubjectiveService
 	examSvc            *service.ExamService
@@ -40,6 +41,7 @@ func New(
 	authSvc *service.AuthService,
 	questionSvc *service.QuestionService,
 	questionVersionSvc *service.QuestionVersionService,
+	questionStatsSvc *service.QuestionStatsService,
 	attemptSvc *service.AttemptService,
 	subjectiveSvc *service.SubjectiveService,
 	examSvc *service.ExamService,
@@ -63,6 +65,7 @@ func New(
 		authSvc:            authSvc,
 		questionSvc:        questionSvc,
 		questionVersionSvc: questionVersionSvc,
+		questionStatsSvc:   questionStatsSvc,
 		attemptSvc:         attemptSvc,
 		subjectiveSvc:      subjectiveSvc,
 		examSvc:            examSvc,
@@ -160,6 +163,11 @@ func (h *HTTPHandler) Router() *gin.Engine {
 				teacher.DELETE("/paper/snapshots/:id", h.deletePaperSnapshot)
 
 				teacher.GET("/paper/knowledge-tags", h.getKnowledgeTags)
+
+				teacher.GET("/question-stats/distribution", h.getDifficultyDistribution)
+				teacher.GET("/question-stats/abnormal", h.getAbnormalQuestions)
+				teacher.POST("/question-stats/recalculate", h.recalculateDifficulty)
+				teacher.GET("/question-stats/questions", h.listQuestionsWithStats)
 			}
 
 			student := authed.Group("/student", middleware.RequireRole(models.RoleStudent))
@@ -1763,4 +1771,57 @@ func (h *HTTPHandler) getKnowledgeTags(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, tags)
+}
+
+func (h *HTTPHandler) getDifficultyDistribution(c *gin.Context) {
+	dist, err := h.questionStatsSvc.GetDifficultyDistribution()
+	if err != nil {
+		h.log.Error("get difficulty distribution failed", "error", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "加载难度分布失败"})
+		return
+	}
+	c.JSON(http.StatusOK, dist)
+}
+
+func (h *HTTPHandler) getAbnormalQuestions(c *gin.Context) {
+	abnormalType := c.DefaultQuery("type", "all")
+	questions, err := h.questionStatsSvc.GetAbnormalQuestions(abnormalType)
+	if err != nil {
+		h.log.Error("get abnormal questions failed", "error", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "加载异常题目失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": questions, "total": len(questions)})
+}
+
+func (h *HTTPHandler) recalculateDifficulty(c *gin.Context) {
+	result, err := h.questionStatsSvc.RecalculateAll()
+	if err != nil {
+		h.log.Error("recalculate difficulty failed", "error", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "重算难度失败"})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *HTTPHandler) listQuestionsWithStats(c *gin.Context) {
+	var filter service.QuestionStatsFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid filter"})
+		return
+	}
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PageSize < 1 || filter.PageSize > 100 {
+		filter.PageSize = 20
+	}
+
+	questions, total, err := h.questionStatsSvc.ListQuestionsWithStats(filter)
+	if err != nil {
+		h.log.Error("list questions with stats failed", "error", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "加载题目失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": questions, "total": total, "page": filter.Page, "pageSize": filter.PageSize})
 }
