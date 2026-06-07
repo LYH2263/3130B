@@ -36,4 +36,11 @@ var (
 	ErrInvalidDiscussion      = errors.New("invalid discussion content")
 	ErrReplyTooDeep           = errors.New("replies only support two levels")
 	ErrCannotDeleteDiscussion = errors.New("no permission to delete this discussion")
+
+	ErrExportTaskNotFound   = errors.New("export task not found")
+	ErrExportFormatInvalid  = errors.New("invalid export format")
+	ErrExportDimensionInvalid = errors.New("invalid export dimension")
+	ErrExportGenerateFailed = errors.New("export generation failed")
+	ErrExportExpired        = errors.New("export file expired")
+	ErrExportNoData         = errors.New("no data to export")
 )

@@ -284,3 +284,46 @@ type PkRoundResult struct {
 func (PkRoundResult) TableName() string {
 	return "pk_round_results"
 }
+
+const (
+	ExportStatusProcessing = "processing"
+	ExportStatusCompleted  = "completed"
+	ExportStatusFailed     = "failed"
+)
+
+const (
+	ExportFormatExcel = "xlsx"
+	ExportFormatCSV   = "csv"
+)
+
+const (
+	ExportDimClass   = "class"
+	ExportDimExam    = "exam"
+	ExportDimTime    = "time"
+)
+
+type ExportTask struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	UserID      uint      `gorm:"index;not null" json:"userId"`
+	User        *User     `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	Format      string    `gorm:"size:8;not null;index" json:"format"`
+	Dimension   string    `gorm:"size:16;not null" json:"dimension"`
+	ClassIDs    string    `gorm:"type:text" json:"classIds"`
+	ExamID      *uint     `gorm:"index" json:"examId"`
+	StartTime   *time.Time `json:"startTime"`
+	EndTime     *time.Time `json:"endTime"`
+	Status      string    `gorm:"size:16;not null;default:processing;index" json:"status"`
+	FileName    string    `gorm:"size:255" json:"fileName"`
+	FileURL     string    `gorm:"size:512" json:"fileUrl"`
+	FileSize    int64     `gorm:"default:0" json:"fileSize"`
+	TotalRecords int      `gorm:"default:0" json:"totalRecords"`
+	Progress    int       `gorm:"default:0" json:"progress"`
+	ErrorMsg    string    `gorm:"type:text" json:"errorMsg"`
+	ExpiresAt   *time.Time `gorm:"index" json:"expiresAt"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+func (ExportTask) TableName() string {
+	return "export_tasks"
+}

@@ -14,6 +14,7 @@ import { StudentExamCenterPage } from './pages/StudentExamCenterPage';
 import { ExamPage } from './pages/ExamPage';
 import { PkLobbyPage } from './pages/PkLobbyPage';
 import { PkGamePage } from './pages/PkGamePage';
+import { TeacherReportPage } from './pages/TeacherReportPage';
 
 const TOKEN_KEY = 'quizlab_token_3130';
 
@@ -153,6 +154,15 @@ export default function App() {
             classes={classes}
           />
         );
+      case 'report':
+        return (
+          <TeacherReportPage
+            user={user}
+            token={token}
+            onLogout={handleLogout}
+            classes={classes}
+          />
+        );
       case 'dashboard':
       default:
         return (
@@ -163,6 +173,7 @@ export default function App() {
             onNavigateToSubjective={() => setTeacherPage('subjective')}
             onNavigateToGrading={() => setTeacherPage('grading')}
             onNavigateToExam={() => setTeacherPage('exam')}
+            onNavigateToReport={() => setTeacherPage('report')}
           />
         );
     }

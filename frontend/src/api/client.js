@@ -213,3 +213,61 @@ export function connectPkWebSocket(roomCode, token) {
   const wsUrl = `${wsBase}/api/pk/ws/${roomCode}?token=${encodeURIComponent(token)}`;
   return new WebSocket(wsUrl);
 }
+
+export async function createExport(data, token) {
+  return apiRequest('/teacher/exports', { method: 'POST', token, body: data });
+}
+
+export async function getExportTasks(params, token) {
+  const query = new URLSearchParams();
+  if (params?.status) query.set('status', params.status);
+  if (params?.page) query.set('page', params.page);
+  if (params?.pageSize) query.set('pageSize', params.pageSize);
+  return apiRequest(`/teacher/exports?${query.toString()}`, { token });
+}
+
+export async function getExportTask(id, token) {
+  return apiRequest(`/teacher/exports/${id}`, { token });
+}
+
+export function downloadExport(id, token) {
+  const url = `${API_BASE}/teacher/exports/${id}/download`;
+  const link = document.createElement('a');
+  link.href = `${url}?token=${encodeURIComponent(token)}`;
+  link.target = '_blank';
+  link.download = '';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+export async function downloadExportWithFetch(id, token) {
+  const response = await fetch(`${API_BASE}/teacher/exports/${id}/download`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+  
+  if (!response.ok) {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const payload = await response.json();
+      throw new Error(payload.message || '下载失败');
+    }
+    throw new Error('下载失败');
+  }
+  
+  const blob = await response.blob();
+  const disposition = response.headers.get('content-disposition') || '';
+  const match = disposition.match(/filename="(.+)"/);
+  const fileName = match ? match[1] : `export_${id}`;
+  
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+}

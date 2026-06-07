@@ -27,6 +27,7 @@ type HTTPHandler struct {
 	discussionSvc *service.DiscussionService
 	checkinSvc    *service.CheckinService
 	pkSvc         *service.PkService
+	exportSvc     *service.ExportService
 	tokens        *auth.TokenManager
 	log           *slog.Logger
 	wsUpgrader    *websocket.Upgrader
@@ -41,6 +42,7 @@ func New(
 	discussionSvc *service.DiscussionService,
 	checkinSvc *service.CheckinService,
 	pkSvc *service.PkService,
+	exportSvc *service.ExportService,
 	tokens *auth.TokenManager,
 	log *slog.Logger,
 ) *HTTPHandler {
@@ -60,6 +62,7 @@ func New(
 		discussionSvc: discussionSvc,
 		checkinSvc:    checkinSvc,
 		pkSvc:         pkSvc,
+		exportSvc:     exportSvc,
 		tokens:        tokens,
 		log:           log,
 		wsUpgrader:    upgrader,
@@ -115,6 +118,11 @@ func (h *HTTPHandler) Router() *gin.Engine {
 				teacher.PUT("/exams/:id", h.updateExam)
 				teacher.DELETE("/exams/:id", h.deleteExam)
 				teacher.GET("/exams/:id/participants", h.getExamParticipants)
+
+				teacher.POST("/exports", h.createExport)
+				teacher.GET("/exports", h.listExports)
+				teacher.GET("/exports/:id", h.getExportTask)
+				teacher.GET("/exports/:id/download", h.downloadExport)
 			}
 
 			student := authed.Group("/student", middleware.RequireRole(models.RoleStudent))
@@ -672,6 +680,16 @@ func (h *HTTPHandler) respondServiceError(c *gin.Context, err error) {
 		errors.Is(err, service.ErrPkAlreadyInRoom), errors.Is(err, service.ErrPkNotInRoom),
 		errors.Is(err, service.ErrPkInvalidAnswer):
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrExportTaskNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrExportFormatInvalid), errors.Is(err, service.ErrExportDimensionInvalid):
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrExportExpired):
+		c.JSON(http.StatusGone, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrExportNoData):
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrExportGenerateFailed):
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 	default:
 		h.log.Error("service error", "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
@@ -1173,4 +1191,93 @@ func (h *HTTPHandler) pkWebSocket(c *gin.Context) {
 	}
 
 	h.pkSvc.HandleWebSocket(conn, claims.UserID, claims.Username, roomCode)
+}
+
+func (h *HTTPHandler) createExport(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	var req dto.ExportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid export payload"})
+		return
+	}
+	result, err := h.exportSvc.CreateExportTask(claims.UserID, req)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, result)
+}
+
+func (h *HTTPHandler) listExports(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	var filter dto.ExportListFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid filter"})
+		return
+	}
+	items, total, err := h.exportSvc.ListTasks(claims.UserID, filter)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "page": filter.Page, "pageSize": filter.PageSize})
+}
+
+func (h *HTTPHandler) getExportTask(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid task id"})
+		return
+	}
+	task, err := h.exportSvc.GetTask(uint(id), claims.UserID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, task)
+}
+
+func (h *HTTPHandler) downloadExport(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid task id"})
+		return
+	}
+	fileName, file, fileSize, err := h.exportSvc.DownloadFile(uint(id), claims.UserID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	defer file.Close()
+
+	contentType := "application/octet-stream"
+	if strings.HasSuffix(fileName, ".xlsx") {
+		contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	} else if strings.HasSuffix(fileName, ".csv") {
+		contentType = "text/csv; charset=utf-8"
+	}
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+	c.Header("Content-Type", contentType)
+	c.Header("Content-Length", fmt.Sprintf("%d", fileSize))
+
+	io.Copy(c.Writer, file)
 }

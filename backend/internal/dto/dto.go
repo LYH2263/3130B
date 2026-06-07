@@ -244,3 +244,57 @@ type PkPlayerLeaveData struct {
 	PlayerName string `json:"playerName"`
 	Reason     string `json:"reason"`
 }
+
+type ExportRequest struct {
+	Format    string  `json:"format" binding:"required,oneof=xlsx csv"`
+	Dimension string  `json:"dimension" binding:"required,oneof=class exam time"`
+	ClassIDs  []uint  `json:"classIds"`
+	ExamID    *uint   `json:"examId"`
+	StartTime *string `json:"startTime"`
+	EndTime   *string `json:"endTime"`
+}
+
+type ExportTaskResponse struct {
+	ID           uint   `json:"id"`
+	Format       string `json:"format"`
+	Dimension    string `json:"dimension"`
+	Status       string `json:"status"`
+	FileName     string `json:"fileName"`
+	FileURL      string `json:"fileUrl"`
+	FileSize     int64  `json:"fileSize"`
+	TotalRecords int    `json:"totalRecords"`
+	Progress     int    `json:"progress"`
+	ErrorMsg     string `json:"errorMsg"`
+	ExpiresAt    string `json:"expiresAt"`
+	CreatedAt    string `json:"createdAt"`
+	IsAsync      bool   `json:"isAsync"`
+}
+
+type ExportListFilter struct {
+	Status   string `form:"status"`
+	Page     int    `form:"page,default=1"`
+	PageSize int    `form:"pageSize,default=10"`
+}
+
+type ClassOverviewStat struct {
+	ClassID    uint    `json:"classId"`
+	ClassName  string  `json:"className"`
+	StudentCount int   `json:"studentCount"`
+	AvgScore   float64 `json:"avgScore"`
+	MaxScore   int     `json:"maxScore"`
+	MinScore   int     `json:"minScore"`
+	PassRate   float64 `json:"passRate"`
+	TotalScore int     `json:"totalScore"`
+}
+
+type StudentScoreItem struct {
+	StudentID   uint   `json:"studentId"`
+	StudentName string `json:"studentName"`
+	ClassID     uint   `json:"classId"`
+	ClassName   string `json:"className"`
+	AttemptID   uint   `json:"attemptId"`
+	Score       int    `json:"score"`
+	Total       int    `json:"total"`
+	Rate        string `json:"rate"`
+	CreatedAt   string `json:"createdAt"`
+}
