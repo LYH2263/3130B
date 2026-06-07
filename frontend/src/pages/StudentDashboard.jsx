@@ -4,7 +4,7 @@ import { toast } from 'react-hot-toast';
 import { apiRequest } from '../api/client';
 import { StatCard } from '../components/StatCard';
 
-export function StudentDashboard({ user, token, onLogout, onNavigateToSubjective, onNavigateToMySubjective }) {
+export function StudentDashboard({ user, token, onLogout, onNavigateToSubjective, onNavigateToMySubjective, onNavigateToExam }) {
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
@@ -117,6 +117,9 @@ export function StudentDashboard({ user, token, onLogout, onNavigateToSubjective
           </button>
           <button className="btn btn-outline btn-purple" onClick={onNavigateToMySubjective}>
             我的主观题
+          </button>
+          <button className="btn btn-outline btn-info" onClick={onNavigateToExam}>
+            考试中心
           </button>
           <button className="btn btn-neutral" onClick={onLogout}>
             退出登录

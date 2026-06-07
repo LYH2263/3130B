@@ -21,6 +21,7 @@ type HTTPHandler struct {
 	questionSvc   *service.QuestionService
 	attemptSvc    *service.AttemptService
 	subjectiveSvc *service.SubjectiveService
+	examSvc       *service.ExamService
 	tokens        *auth.TokenManager
 	log           *slog.Logger
 }
@@ -30,6 +31,7 @@ func New(
 	questionSvc *service.QuestionService,
 	attemptSvc *service.AttemptService,
 	subjectiveSvc *service.SubjectiveService,
+	examSvc *service.ExamService,
 	tokens *auth.TokenManager,
 	log *slog.Logger,
 ) *HTTPHandler {
@@ -38,6 +40,7 @@ func New(
 		questionSvc:   questionSvc,
 		attemptSvc:    attemptSvc,
 		subjectiveSvc: subjectiveSvc,
+		examSvc:       examSvc,
 		tokens:        tokens,
 		log:           log,
 	}
@@ -85,6 +88,13 @@ func (h *HTTPHandler) Router() *gin.Engine {
 				teacher.GET("/subjective-submissions/:id", h.getSubjectiveSubmission)
 				teacher.POST("/subjective-submissions/:id/grade", h.gradeSubjectiveSubmission)
 				teacher.GET("/subjective-pending-count", h.subjectivePendingCount)
+
+				teacher.GET("/exams", h.listExams)
+				teacher.GET("/exams/:id", h.getExam)
+				teacher.POST("/exams", h.createExam)
+				teacher.PUT("/exams/:id", h.updateExam)
+				teacher.DELETE("/exams/:id", h.deleteExam)
+				teacher.GET("/exams/:id/participants", h.getExamParticipants)
 			}
 
 			student := authed.Group("/student", middleware.RequireRole(models.RoleStudent))
@@ -99,6 +109,12 @@ func (h *HTTPHandler) Router() *gin.Engine {
 				student.POST("/subjective-submit", h.studentSubjectiveSubmit)
 				student.GET("/subjective-submissions", h.studentSubjectiveSubmissions)
 				student.GET("/subjective-submissions/:id", h.studentSubjectiveSubmission)
+
+				student.GET("/exams", h.studentExams)
+				student.GET("/exams/:id", h.studentExamDetail)
+				student.POST("/exams/:id/enter", h.enterExam)
+				student.POST("/exams/:id/submit", h.submitExam)
+				student.GET("/exams/:id/result", h.examResult)
 			}
 		}
 	}
@@ -565,6 +581,16 @@ func (h *HTTPHandler) respondServiceError(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
 	case errors.Is(err, service.ErrConcurrentUpdate):
 		c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrExamNotFound), errors.Is(err, service.ErrParticipantNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrExamTimeConflict), errors.Is(err, service.ErrAlreadySubmitted):
+		c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrExamInvalidTimeRange), errors.Is(err, service.ErrInvalidExamStatus):
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrExamNotStarted), errors.Is(err, service.ErrExamAlreadyEnded),
+		errors.Is(err, service.ErrExamCancelled), errors.Is(err, service.ErrNotInExamClass),
+		errors.Is(err, service.ErrExamInProgress):
+		c.JSON(http.StatusForbidden, gin.H{"message": err.Error()})
 	default:
 		h.log.Error("service error", "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
@@ -593,4 +619,187 @@ func cors() gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+func (h *HTTPHandler) listExams(c *gin.Context) {
+	var filter dto.ExamFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid filter"})
+		return
+	}
+	exams, total, err := h.examSvc.ListExams(filter)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": exams, "total": total, "page": filter.Page, "pageSize": filter.PageSize})
+}
+
+func (h *HTTPHandler) getExam(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid exam id"})
+		return
+	}
+	exam, err := h.examSvc.GetExam(uint(id))
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, exam)
+}
+
+func (h *HTTPHandler) createExam(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	var req dto.ExamCreateInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid exam payload"})
+		return
+	}
+	exam, err := h.examSvc.CreateExam(req, claims.UserID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, exam)
+}
+
+func (h *HTTPHandler) updateExam(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid exam id"})
+		return
+	}
+	var req dto.ExamUpdateInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid exam payload"})
+		return
+	}
+	exam, err := h.examSvc.UpdateExam(uint(id), req)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, exam)
+}
+
+func (h *HTTPHandler) deleteExam(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid exam id"})
+		return
+	}
+	if err := h.examSvc.DeleteExam(uint(id)); err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "exam deleted"})
+}
+
+func (h *HTTPHandler) getExamParticipants(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid exam id"})
+		return
+	}
+	participants, err := h.examSvc.GetExamParticipants(uint(id))
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, participants)
+}
+
+func (h *HTTPHandler) studentExams(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	exams, err := h.examSvc.GetStudentExams(claims.UserID, claims.ClassID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, exams)
+}
+
+func (h *HTTPHandler) studentExamDetail(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid exam id"})
+		return
+	}
+	exam, err := h.examSvc.GetExam(uint(id))
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, exam)
+}
+
+func (h *HTTPHandler) enterExam(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok || claims.ClassID == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid student context"})
+		return
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid exam id"})
+		return
+	}
+	exam, participant, err := h.examSvc.EnterExam(claims.UserID, *claims.ClassID, uint(id))
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"exam": exam, "participant": participant})
+}
+
+func (h *HTTPHandler) submitExam(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid exam id"})
+		return
+	}
+	var req dto.ExamSubmitRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid submit payload"})
+		return
+	}
+	participant, err := h.examSvc.SubmitExam(claims.UserID, uint(id), req)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, participant)
+}
+
+func (h *HTTPHandler) examResult(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid exam id"})
+		return
+	}
+	participant, err := h.examSvc.GetStudentParticipant(claims.UserID, uint(id))
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, participant)
 }

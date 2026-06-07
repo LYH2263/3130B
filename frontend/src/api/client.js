@@ -91,3 +91,52 @@ export async function getStudentSubjectiveSubmissions(token) {
 export async function getStudentSubjectiveSubmission(id, token) {
   return apiRequest(`/student/subjective-submissions/${id}`, { token });
 }
+
+export async function getExams(params, token) {
+  const query = new URLSearchParams();
+  if (params?.status) query.set('status', params.status);
+  if (params?.classId) query.set('classId', params.classId);
+  if (params?.page) query.set('page', params.page);
+  if (params?.pageSize) query.set('pageSize', params.pageSize);
+  return apiRequest(`/teacher/exams?${query.toString()}`, { token });
+}
+
+export async function getExam(id, token) {
+  return apiRequest(`/teacher/exams/${id}`, { token });
+}
+
+export async function createExam(data, token) {
+  return apiRequest('/teacher/exams', { method: 'POST', token, body: data });
+}
+
+export async function updateExam(id, data, token) {
+  return apiRequest(`/teacher/exams/${id}`, { method: 'PUT', token, body: data });
+}
+
+export async function deleteExam(id, token) {
+  return apiRequest(`/teacher/exams/${id}`, { method: 'DELETE', token });
+}
+
+export async function getExamParticipants(id, token) {
+  return apiRequest(`/teacher/exams/${id}/participants`, { token });
+}
+
+export async function getStudentExams(token) {
+  return apiRequest('/student/exams', { token });
+}
+
+export async function getStudentExamDetail(id, token) {
+  return apiRequest(`/student/exams/${id}`, { token });
+}
+
+export async function enterExam(id, token) {
+  return apiRequest(`/student/exams/${id}/enter`, { method: 'POST', token });
+}
+
+export async function submitExam(id, answers, token) {
+  return apiRequest(`/student/exams/${id}/submit`, { method: 'POST', token, body: { answers } });
+}
+
+export async function getExamResult(id, token) {
+  return apiRequest(`/student/exams/${id}/result`, { token });
+}

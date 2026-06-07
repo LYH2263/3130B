@@ -59,3 +59,33 @@ type SubjectiveSubmissionFilter struct {
 	Page       int    `form:"page,default=1"`
 	PageSize   int    `form:"pageSize,default=20"`
 }
+
+type ExamCreateInput struct {
+	Name          string `json:"name" binding:"required,min=1,max=128"`
+	QuestionSetID *uint  `json:"questionSetId"`
+	StartTime     string `json:"startTime" binding:"required"`
+	EndTime       string `json:"endTime" binding:"required"`
+	Duration      int    `json:"duration" binding:"required,min=1"`
+	ClassIDs      []uint `json:"classIds" binding:"required,min=1,dive"`
+}
+
+type ExamUpdateInput struct {
+	Name          string `json:"name" binding:"omitempty,min=1,max=128"`
+	QuestionSetID *uint  `json:"questionSetId"`
+	StartTime     string `json:"startTime"`
+	EndTime       string `json:"endTime"`
+	Duration      int    `json:"duration" binding:"omitempty,min=1"`
+	ClassIDs      []uint `json:"classIds" binding:"omitempty,min=1,dive"`
+	Status        string `json:"status"`
+}
+
+type ExamFilter struct {
+	Status   string `form:"status"`
+	ClassID  *uint  `form:"classId"`
+	Page     int    `form:"page,default=1"`
+	PageSize int    `form:"pageSize,default=20"`
+}
+
+type ExamSubmitRequest struct {
+	Answers []SubmitAnswerItem `json:"answers" binding:"required,min=1,dive"`
+}

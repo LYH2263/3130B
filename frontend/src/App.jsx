@@ -9,6 +9,9 @@ import { TeacherSubjectivePage } from './pages/TeacherSubjectivePage';
 import { TeacherGradingPage } from './pages/TeacherGradingPage';
 import { StudentSubjectivePage } from './pages/StudentSubjectivePage';
 import { StudentMySubjectivePage } from './pages/StudentMySubjectivePage';
+import { TeacherExamPage } from './pages/TeacherExamPage';
+import { StudentExamCenterPage } from './pages/StudentExamCenterPage';
+import { ExamPage } from './pages/ExamPage';
 
 const TOKEN_KEY = 'quizlab_token_3130';
 
@@ -20,6 +23,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [teacherPage, setTeacherPage] = useState('dashboard');
   const [studentPage, setStudentPage] = useState('dashboard');
+  const [selectedExam, setSelectedExam] = useState(null);
 
   const loadClasses = async () => {
     try {
@@ -81,6 +85,7 @@ export default function App() {
     setUser(null);
     setTeacherPage('dashboard');
     setStudentPage('dashboard');
+    setSelectedExam(null);
     toast.success('已退出登录');
   };
 
@@ -116,6 +121,15 @@ export default function App() {
             onNavigateToQuestions={() => setTeacherPage('subjective')}
           />
         );
+      case 'exam':
+        return (
+          <TeacherExamPage
+            user={user}
+            token={token}
+            onLogout={handleLogout}
+            classes={classes}
+          />
+        );
       case 'dashboard':
       default:
         return (
@@ -125,9 +139,22 @@ export default function App() {
             onLogout={handleLogout}
             onNavigateToSubjective={() => setTeacherPage('subjective')}
             onNavigateToGrading={() => setTeacherPage('grading')}
+            onNavigateToExam={() => setTeacherPage('exam')}
           />
         );
     }
+  };
+
+  const handleEnterExam = (exam) => {
+    setSelectedExam(exam);
+  };
+
+  const handleExitExam = () => {
+    setSelectedExam(null);
+  };
+
+  const handleViewExamResult = (exam) => {
+    setSelectedExam({ ...exam, status: 'finished' });
   };
 
   const renderStudentPage = () => {
@@ -150,6 +177,17 @@ export default function App() {
             onNavigateToPractice={() => setStudentPage('subjective')}
           />
         );
+      case 'exam':
+        return (
+          <StudentExamCenterPage
+            user={user}
+            token={token}
+            onLogout={handleLogout}
+            classes={classes}
+            onEnterExam={handleEnterExam}
+            onViewResult={handleViewExamResult}
+          />
+        );
       case 'dashboard':
       default:
         return (
@@ -159,21 +197,43 @@ export default function App() {
             onLogout={handleLogout}
             onNavigateToSubjective={() => setStudentPage('subjective')}
             onNavigateToMySubjective={() => setStudentPage('mySubjective')}
+            onNavigateToExam={() => setStudentPage('exam')}
           />
         );
     }
   };
 
+  const renderContent = () => {
+    if (!user) {
+      return (
+        <AuthPage
+          classes={classes}
+          onLogin={handleLogin}
+          onRegister={handleRegister}
+          loading={authLoading}
+        />
+      );
+    }
+    if (user.role === 'teacher') {
+      return renderTeacherPage();
+    }
+    if (selectedExam) {
+      return (
+        <ExamPage
+          exam={selectedExam}
+          token={token}
+          onBack={handleExitExam}
+          onFinish={handleExitExam}
+        />
+      );
+    }
+    return renderStudentPage();
+  };
+
   return (
     <>
       <Toaster position="top-right" toastOptions={{ duration: 2400 }} />
-      {!user ? (
-        <AuthPage classes={classes} onLogin={handleLogin} onRegister={handleRegister} loading={authLoading} />
-      ) : user.role === 'teacher' ? (
-        renderTeacherPage()
-      ) : (
-        renderStudentPage()
-      )}
+      {renderContent()}
     </>
   );
 }

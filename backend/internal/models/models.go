@@ -75,6 +75,19 @@ const (
 	SubmissionStatusGraded   = "graded"
 )
 
+const (
+	ExamStatusPending   = "pending"
+	ExamStatusOngoing   = "ongoing"
+	ExamStatusFinished  = "finished"
+	ExamStatusCancelled = "cancelled"
+)
+
+const (
+	ParticipantStatusNotJoined = "not_joined"
+	ParticipantStatusOngoing   = "ongoing"
+	ParticipantStatusSubmitted = "submitted"
+)
+
 type SubjectiveQuestion struct {
 	ID            uint      `gorm:"primaryKey" json:"id"`
 	Title         string    `gorm:"type:text;not null" json:"title"`
@@ -104,4 +117,34 @@ type SubjectiveSubmission struct {
 	Version     int                 `gorm:"not null;default:1" json:"version"`
 	CreatedAt   time.Time           `json:"createdAt"`
 	UpdatedAt   time.Time           `json:"updatedAt"`
+}
+
+type Exam struct {
+	ID            uint        `gorm:"primaryKey" json:"id"`
+	Name          string      `gorm:"size:128;not null" json:"name"`
+	QuestionSetID *uint       `gorm:"index" json:"questionSetId"`
+	StartTime     time.Time   `gorm:"index;not null" json:"startTime"`
+	EndTime       time.Time   `gorm:"index;not null" json:"endTime"`
+	Duration      int         `gorm:"not null;default:60" json:"duration"`
+	ClassIDs      string      `gorm:"type:text;not null" json:"classIds"`
+	Status        string      `gorm:"size:16;not null;default:pending;index" json:"status"`
+	CreatedBy     uint        `gorm:"index;not null" json:"createdBy"`
+	Creator       *User       `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`
+	Participants  []ExamParticipant `gorm:"foreignKey:ExamID" json:"participants,omitempty"`
+	CreatedAt     time.Time   `json:"createdAt"`
+	UpdatedAt     time.Time   `json:"updatedAt"`
+}
+
+type ExamParticipant struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	ExamID     uint      `gorm:"index;not null" json:"examId"`
+	Exam       *Exam     `gorm:"foreignKey:ExamID" json:"exam,omitempty"`
+	StudentID  uint      `gorm:"index;not null" json:"studentId"`
+	Student    *User     `gorm:"foreignKey:StudentID" json:"student,omitempty"`
+	Status     string    `gorm:"size:16;not null;default:not_joined;index" json:"status"`
+	Score      *float64  `gorm:"type:decimal(10,2)" json:"score"`
+	StartedAt  *time.Time `json:"startedAt"`
+	SubmittedAt *time.Time `json:"submittedAt"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
