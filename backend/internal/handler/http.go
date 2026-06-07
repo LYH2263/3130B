@@ -19,23 +19,25 @@ import (
 )
 
 type HTTPHandler struct {
-	authSvc       *service.AuthService
-	questionSvc   *service.QuestionService
-	attemptSvc    *service.AttemptService
-	subjectiveSvc *service.SubjectiveService
-	examSvc       *service.ExamService
-	discussionSvc *service.DiscussionService
-	checkinSvc    *service.CheckinService
-	pkSvc         *service.PkService
-	exportSvc     *service.ExportService
-	tokens        *auth.TokenManager
-	log           *slog.Logger
-	wsUpgrader    *websocket.Upgrader
+	authSvc            *service.AuthService
+	questionSvc        *service.QuestionService
+	questionVersionSvc *service.QuestionVersionService
+	attemptSvc         *service.AttemptService
+	subjectiveSvc      *service.SubjectiveService
+	examSvc            *service.ExamService
+	discussionSvc      *service.DiscussionService
+	checkinSvc         *service.CheckinService
+	pkSvc              *service.PkService
+	exportSvc          *service.ExportService
+	tokens             *auth.TokenManager
+	log                *slog.Logger
+	wsUpgrader         *websocket.Upgrader
 }
 
 func New(
 	authSvc *service.AuthService,
 	questionSvc *service.QuestionService,
+	questionVersionSvc *service.QuestionVersionService,
 	attemptSvc *service.AttemptService,
 	subjectiveSvc *service.SubjectiveService,
 	examSvc *service.ExamService,
@@ -54,18 +56,19 @@ func New(
 		},
 	}
 	return &HTTPHandler{
-		authSvc:       authSvc,
-		questionSvc:   questionSvc,
-		attemptSvc:    attemptSvc,
-		subjectiveSvc: subjectiveSvc,
-		examSvc:       examSvc,
-		discussionSvc: discussionSvc,
-		checkinSvc:    checkinSvc,
-		pkSvc:         pkSvc,
-		exportSvc:     exportSvc,
-		tokens:        tokens,
-		log:           log,
-		wsUpgrader:    upgrader,
+		authSvc:            authSvc,
+		questionSvc:        questionSvc,
+		questionVersionSvc: questionVersionSvc,
+		attemptSvc:         attemptSvc,
+		subjectiveSvc:      subjectiveSvc,
+		examSvc:            examSvc,
+		discussionSvc:      discussionSvc,
+		checkinSvc:         checkinSvc,
+		pkSvc:              pkSvc,
+		exportSvc:          exportSvc,
+		tokens:             tokens,
+		log:                log,
+		wsUpgrader:         upgrader,
 	}
 }
 
@@ -100,6 +103,11 @@ func (h *HTTPHandler) Router() *gin.Engine {
 				teacher.PUT("/questions/:id", h.updateQuestion)
 				teacher.DELETE("/questions/:id", h.deleteQuestion)
 				teacher.POST("/questions/upload", h.uploadQuestions)
+
+				teacher.GET("/questions/:id/versions", h.listQuestionVersions)
+				teacher.GET("/questions/:id/versions/:versionId", h.getQuestionVersion)
+				teacher.POST("/questions/:id/versions/:versionId/rollback", h.rollbackQuestionVersion)
+				teacher.GET("/questions/:id/versions/diff", h.diffQuestionVersions)
 
 				teacher.GET("/subjective-questions", h.listSubjectiveQuestions)
 				teacher.GET("/subjective-questions/:id", h.getSubjectiveQuestion)
@@ -257,17 +265,22 @@ func (h *HTTPHandler) createQuestion(c *gin.Context) {
 }
 
 func (h *HTTPHandler) updateQuestion(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid question id"})
 		return
 	}
-	var req dto.QuestionInput
+	var req dto.QuestionUpdateInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid question payload"})
 		return
 	}
-	question, err := h.questionSvc.UpdateQuestion(uint(id), req)
+	question, err := h.questionVersionSvc.UpdateQuestionWithVersion(uint(id), req.QuestionInput, claims.UserID, req.ChangeNote)
 	if err != nil {
 		h.respondServiceError(c, err)
 		return
@@ -690,6 +703,10 @@ func (h *HTTPHandler) respondServiceError(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 	case errors.Is(err, service.ErrExportGenerateFailed):
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrVersionNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
+	case errors.Is(err, service.ErrVersionMismatch):
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 	default:
 		h.log.Error("service error", "error", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
@@ -1280,4 +1297,80 @@ func (h *HTTPHandler) downloadExport(c *gin.Context) {
 	c.Header("Content-Length", fmt.Sprintf("%d", fileSize))
 
 	io.Copy(c.Writer, file)
+}
+
+func (h *HTTPHandler) listQuestionVersions(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid question id"})
+		return
+	}
+	versions, err := h.questionVersionSvc.ListVersions(uint(id))
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, versions)
+}
+
+func (h *HTTPHandler) getQuestionVersion(c *gin.Context) {
+	versionId, err := strconv.ParseUint(c.Param("versionId"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid version id"})
+		return
+	}
+	version, err := h.questionVersionSvc.GetVersion(uint(versionId))
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, version)
+}
+
+func (h *HTTPHandler) rollbackQuestionVersion(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid token"})
+		return
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid question id"})
+		return
+	}
+	versionId, err := strconv.ParseUint(c.Param("versionId"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid version id"})
+		return
+	}
+	question, err := h.questionVersionSvc.RollbackToVersion(uint(id), uint(versionId), claims.UserID)
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, question)
+}
+
+func (h *HTTPHandler) diffQuestionVersions(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid question id"})
+		return
+	}
+	oldVersionId, err := strconv.ParseUint(c.Query("oldVersionId"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid old version id"})
+		return
+	}
+	newVersionId, err := strconv.ParseUint(c.Query("newVersionId"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid new version id"})
+		return
+	}
+	diff, err := h.questionVersionSvc.DiffVersions(uint(id), uint(oldVersionId), uint(newVersionId))
+	if err != nil {
+		h.respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, diff)
 }

@@ -43,4 +43,7 @@ var (
 	ErrExportGenerateFailed = errors.New("export generation failed")
 	ErrExportExpired        = errors.New("export file expired")
 	ErrExportNoData         = errors.New("no data to export")
+
+	ErrVersionNotFound  = errors.New("version not found")
+	ErrVersionMismatch  = errors.New("version does not belong to this question")
 )

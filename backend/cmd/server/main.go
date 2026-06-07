@@ -34,6 +34,7 @@ func main() {
 	tokens := auth.NewTokenManager(cfg.JWTSecret)
 	authSvc := service.NewAuthService(db, tokens, log)
 	questionSvc := service.NewQuestionService(db, log)
+	questionVersionSvc := service.NewQuestionVersionService(db, log)
 	attemptSvc := service.NewAttemptService(db, log)
 	subjectiveSvc := service.NewSubjectiveService(db, log)
 	examSvc := service.NewExamService(db, log)
@@ -47,7 +48,7 @@ func main() {
 		return
 	}
 
-	h := handler.New(authSvc, questionSvc, attemptSvc, subjectiveSvc, examSvc, discussionSvc, checkinSvc, pkSvc, exportSvc, tokens, log)
+	h := handler.New(authSvc, questionSvc, questionVersionSvc, attemptSvc, subjectiveSvc, examSvc, discussionSvc, checkinSvc, pkSvc, exportSvc, tokens, log)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           h.Router(),

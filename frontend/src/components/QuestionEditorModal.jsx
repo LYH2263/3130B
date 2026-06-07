@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { QuestionVersionHistory } from './QuestionVersionHistory';
+
 function buildInitialState(data) {
   if (!data) {
     return {
@@ -24,12 +26,23 @@ function buildInitialState(data) {
   };
 }
 
-export function QuestionEditorModal({ open, initialData, onClose, onSubmit, loading }) {
+export function QuestionEditorModal({
+  open,
+  initialData,
+  onClose,
+  onSubmit,
+  loading,
+  token,
+  onRollback,
+}) {
   const [form, setForm] = useState(buildInitialState(initialData));
+  const [changeNote, setChangeNote] = useState('');
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
       setForm(buildInitialState(initialData));
+      setChangeNote('');
     }
   }, [open, initialData]);
 
@@ -67,14 +80,17 @@ export function QuestionEditorModal({ open, initialData, onClose, onSubmit, load
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    onSubmit({
-      title: form.title,
-      description: form.description,
-      options: form.options.map((item) => ({
-        content: item.content,
-        isCorrect: item.isCorrect,
-      })),
-    });
+    onSubmit(
+      {
+        title: form.title,
+        description: form.description,
+        options: form.options.map((item) => ({
+          content: item.content,
+          isCorrect: item.isCorrect,
+        })),
+      },
+      changeNote
+    );
   };
 
   return (
@@ -82,9 +98,20 @@ export function QuestionEditorModal({ open, initialData, onClose, onSubmit, load
       <div className="w-full max-w-2xl rounded-2xl bg-base-100 p-6 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-xl font-semibold text-slate-800">{initialData ? '编辑题目' : '新增题目'}</h3>
-          <button type="button" className="btn btn-sm btn-ghost" onClick={onClose}>
-            关闭
-          </button>
+          <div className="flex items-center gap-2">
+            {initialData && token && (
+              <button
+                type="button"
+                className="btn btn-sm btn-outline"
+                onClick={() => setVersionHistoryOpen(true)}
+              >
+                历史版本
+              </button>
+            )}
+            <button type="button" className="btn btn-sm btn-ghost" onClick={onClose}>
+              关闭
+            </button>
+          </div>
         </div>
 
         <form className="space-y-4" onSubmit={handleSubmit}>
@@ -154,6 +181,22 @@ export function QuestionEditorModal({ open, initialData, onClose, onSubmit, load
             <p className="text-xs text-slate-500">绿色单选为正确答案，必须且只能有一个正确答案。</p>
           </div>
 
+          {initialData && (
+            <label className="form-control">
+              <span className="label-text mb-1 text-sm font-medium">变更备注（可选）</span>
+              <textarea
+                className="textarea textarea-bordered min-h-16"
+                value={changeNote}
+                onChange={(e) => setChangeNote(e.target.value)}
+                placeholder="描述本次修改的内容，便于版本回溯"
+                maxLength={500}
+              />
+              <span className="label-text mt-1 text-right text-xs text-slate-400">
+                {changeNote.length}/500
+              </span>
+            </label>
+          )}
+
           <div className="flex justify-end gap-2">
             <button type="button" className="btn btn-ghost" onClick={onClose}>
               取消
@@ -164,6 +207,19 @@ export function QuestionEditorModal({ open, initialData, onClose, onSubmit, load
           </div>
         </form>
       </div>
+
+      {versionHistoryOpen && initialData && (
+        <QuestionVersionHistory
+          questionId={initialData.id}
+          token={token}
+          onClose={() => setVersionHistoryOpen(false)}
+          onRollback={() => {
+            if (onRollback) {
+              onRollback();
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

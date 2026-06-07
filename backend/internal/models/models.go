@@ -327,3 +327,31 @@ type ExportTask struct {
 func (ExportTask) TableName() string {
 	return "export_tasks"
 }
+
+type QuestionVersion struct {
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	QuestionID    uint      `gorm:"index;not null" json:"questionId"`
+	VersionNumber int       `gorm:"not null;index" json:"versionNumber"`
+	Snapshot      string    `gorm:"type:longtext;not null" json:"-"`
+	SnapshotData  *QuestionSnapshot `gorm:"-" json:"snapshot"`
+	ModifiedBy    uint      `gorm:"index;not null" json:"modifiedBy"`
+	Modifier      *User     `gorm:"foreignKey:ModifiedBy" json:"modifier,omitempty"`
+	ChangeNote    string    `gorm:"type:text" json:"changeNote"`
+	CreatedAt     time.Time `json:"createdAt"`
+}
+
+func (QuestionVersion) TableName() string {
+	return "question_versions"
+}
+
+type QuestionSnapshot struct {
+	Title       string               `json:"title"`
+	Description string               `json:"description"`
+	Options     []QuestionOptionSnap `json:"options"`
+}
+
+type QuestionOptionSnap struct {
+	ID        uint   `json:"id"`
+	Content   string `json:"content"`
+	IsCorrect bool   `json:"isCorrect"`
+}

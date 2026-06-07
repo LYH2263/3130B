@@ -44,7 +44,7 @@ export function TeacherDashboard({ user, token, onLogout, onNavigateToSubjective
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const handleSaveQuestion = async (payload) => {
+  const handleSaveQuestion = async (payload, changeNote) => {
     try {
       questionSchema.parse(payload);
       setSavingQuestion(true);
@@ -52,7 +52,7 @@ export function TeacherDashboard({ user, token, onLogout, onNavigateToSubjective
         await apiRequest(`/teacher/questions/${editingQuestion.id}`, {
           method: 'PUT',
           token,
-          body: payload,
+          body: { ...payload, changeNote },
         });
         toast.success('题目已更新');
       } else {
@@ -311,6 +311,10 @@ export function TeacherDashboard({ user, token, onLogout, onNavigateToSubjective
         }}
         onSubmit={handleSaveQuestion}
         loading={savingQuestion}
+        token={token}
+        onRollback={async () => {
+          await loadDashboard();
+        }}
       />
     </div>
   );

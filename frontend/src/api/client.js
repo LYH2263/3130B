@@ -271,3 +271,33 @@ export async function downloadExportWithFetch(id, token) {
   document.body.removeChild(link);
   window.URL.revokeObjectURL(url);
 }
+
+export async function getQuestionVersions(questionId, token) {
+  return apiRequest(`/teacher/questions/${questionId}/versions`, { token });
+}
+
+export async function getQuestionVersion(questionId, versionId, token) {
+  return apiRequest(`/teacher/questions/${questionId}/versions/${versionId}`, { token });
+}
+
+export async function rollbackQuestionVersion(questionId, versionId, token) {
+  return apiRequest(`/teacher/questions/${questionId}/versions/${versionId}/rollback`, {
+    method: 'POST',
+    token,
+  });
+}
+
+export async function diffQuestionVersions(questionId, oldVersionId, newVersionId, token) {
+  return apiRequest(
+    `/teacher/questions/${questionId}/versions/diff?oldVersionId=${oldVersionId}&newVersionId=${newVersionId}`,
+    { token }
+  );
+}
+
+export async function updateQuestionWithNote(questionId, data, token) {
+  return apiRequest(`/teacher/questions/${questionId}`, {
+    method: 'PUT',
+    token,
+    body: data,
+  });
+}

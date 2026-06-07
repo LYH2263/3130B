@@ -22,6 +22,11 @@ type QuestionInput struct {
 	Options     []QuestionOptionInput `json:"options" binding:"required,min=2,max=6,dive"`
 }
 
+type QuestionUpdateInput struct {
+	QuestionInput
+	ChangeNote string `json:"changeNote" binding:"max=500"`
+}
+
 type UploadQuestionPayload struct {
 	Questions []QuestionInput `json:"questions"`
 }
