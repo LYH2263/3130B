@@ -12,6 +12,12 @@ import (
 	"label3130/backend/internal/models"
 )
 
+type studentStat struct {
+	userID  uint
+	correct int
+	total   int
+}
+
 type QuestionStatsService struct {
 	db  *gorm.DB
 	log *slog.Logger
@@ -373,12 +379,6 @@ func (s *QuestionStatsService) calculateDiscrimination(questionID uint) (float64
 
 	if len(answers) < models.MinSampleSize {
 		return 0, fmt.Errorf("insufficient sample size")
-	}
-
-	type studentStat struct {
-		userID  uint
-		correct int
-		total   int
 	}
 
 	studentMap := make(map[uint]*studentStat)

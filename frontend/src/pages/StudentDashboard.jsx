@@ -9,7 +9,7 @@ import { BadgeWall } from '../components/BadgeWall';
 import { CelebrationModal } from '../components/CelebrationModal';
 import { getCheckinStatus } from '../api/client';
 
-export function StudentDashboard({ user, token, onLogout, onNavigateToSubjective, onNavigateToMySubjective, onNavigateToExam }) {
+export function StudentDashboard({ user, token, onLogout, onNavigateToSubjective, onNavigateToMySubjective, onNavigateToExam, onNavigateToPk }) {
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});

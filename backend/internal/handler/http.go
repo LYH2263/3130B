@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -203,13 +204,13 @@ func (h *HTTPHandler) Router() *gin.Engine {
 				student.POST("/pk/rooms", h.createPkRoom)
 				student.POST("/pk/rooms/join", h.joinPkRoom)
 				student.GET("/pk/rooms/:code", h.getPkRoom)
-				student.GET("/pk/rooms/:id/results", h.getPkRoundResults)
+				student.GET("/pk/rooms/:code/results", h.getPkRoundResults)
 
 				student.POST("/proctor/report", h.reportProctorEvents)
 				student.GET("/proctor/exams/:id/status", h.getProctorStudentStatus)
 			}
 
-			teacher := authed.Group("/teacher", middleware.RequireRole(models.RoleTeacher))
+			teacher = authed.Group("/teacher", middleware.RequireRole(models.RoleTeacher))
 			{
 				teacher.GET("/discussions", h.listDiscussions)
 				teacher.GET("/discussions/replies", h.listReplies)
@@ -1220,7 +1221,7 @@ func (h *HTTPHandler) getPkRoom(c *gin.Context) {
 }
 
 func (h *HTTPHandler) getPkRoundResults(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	id, err := strconv.ParseUint(c.Param("code"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid room id"})
 		return

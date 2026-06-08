@@ -420,7 +420,7 @@ func (ProctorEvent) TableName() string {
 
 type ProctorConfig struct {
 	ID              uint   `gorm:"primaryKey" json:"id"`
-	ExamID          *uint  `gorm:"uniqueIndex;index" json:"examId"`
+	ExamID          *uint  `gorm:"uniqueIndex" json:"examId"`
 	IsGlobal        bool   `gorm:"not null;default:false;index" json:"isGlobal"`
 	WarningThreshold int   `gorm:"not null;default:3" json:"warningThreshold"`
 	ForceSubmitThreshold int `gorm:"not null;default:5" json:"forceSubmitThreshold"`
@@ -602,7 +602,7 @@ const (
 
 type QuestionStats struct {
 	ID             uint       `gorm:"primaryKey" json:"id"`
-	QuestionID     uint       `gorm:"uniqueIndex;not null;index" json:"questionId"`
+	QuestionID     uint       `gorm:"uniqueIndex;not null" json:"questionId"`
 	Question       *Question  `gorm:"foreignKey:QuestionID" json:"question,omitempty"`
 	TotalAttempts  int64      `gorm:"not null;default:0;index" json:"totalAttempts"`
 	CorrectCount   int64      `gorm:"not null;default:0" json:"correctCount"`

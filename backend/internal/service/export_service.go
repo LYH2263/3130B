@@ -525,7 +525,7 @@ func (s *ExportService) streamStudentScores(task *models.ExportTask, classID uin
 		for _, attempt := range batch {
 			rate := fmt.Sprintf("%.0f%%", float64(attempt.Score)/float64(attempt.Total)*100)
 			className := ""
-			if attempt.ClassRoom != nil {
+			if attempt.ClassID != 0 {
 				className = attempt.ClassRoom.Name
 			}
 			item := dto.StudentScoreItem{

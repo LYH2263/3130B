@@ -2,7 +2,6 @@ package service
 
 import (
 	"fmt"
-	"html"
 	"log/slog"
 	"strings"
 
@@ -175,7 +174,7 @@ func (s *DiscussionService) ToggleLike(discussionID uint, userID uint) (bool, in
 		First(&existingLike).Error
 
 	isLiked := false
-	var likeCount := discussion.LikeCount
+	likeCount := discussion.LikeCount
 
 	if err == nil {
 		if err := s.db.Delete(&existingLike).Error; err != nil {

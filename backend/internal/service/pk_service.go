@@ -671,10 +671,10 @@ func (s *PkService) endGame(room *pkRoomState) {
 	isDraw := false
 
 	if room.ScoreA > room.ScoreB {
-		winnerID = room.PlayerA.UserID
+		winnerID = &room.PlayerA.UserID
 		winnerName = room.PlayerA.Username
 	} else if room.ScoreB > room.ScoreA {
-		winnerID = room.PlayerB.UserID
+		winnerID = &room.PlayerB.UserID
 		winnerName = room.PlayerB.Username
 	} else {
 		isDraw = true
